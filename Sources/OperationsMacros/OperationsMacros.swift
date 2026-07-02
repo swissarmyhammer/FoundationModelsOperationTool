@@ -133,7 +133,9 @@ private func docCommentDescription(from trivia: Trivia) -> String? {
 // MARK: - Type mapping
 
 /// Maps a supported primitive Swift type name to the source text of its
-/// corresponding `ParamType` case. The single source of truth for which
+/// corresponding `ParamType` case.
+///
+/// The single source of truth for which
 /// primitive types `@Operation` supports, so adding or changing a mapping is
 /// a one-line edit instead of a switch arm kept in sync by hand.
 private let primitiveTypeMapping: [String: String] = [
@@ -159,7 +161,9 @@ private func primitiveParamTypeExprText(_ type: TypeSyntax) -> String? {
 }
 
 /// Maps a field type to `(ParamType source text, required)`, unwrapping a
-/// single level of `Optional` (`T?`) to derive `required`. Returns `nil` for
+/// single level of `Optional` (`T?`) to derive `required`.
+///
+/// Returns `nil` for
 /// unsupported types.
 private func paramTypeInfo(for type: TypeSyntax) -> (typeExprText: String, required: Bool)? {
     if let optionalType = type.as(OptionalTypeSyntax.self) {
@@ -174,6 +178,7 @@ private func paramTypeInfo(for type: TypeSyntax) -> (typeExprText: String, requi
 
 /// Finds every attribute named `name` in `attributes` and yields its
 /// argument list, skipping attributes that carry no parenthesized arguments.
+///
 /// Shared by `guideInfo(from:)` and `operationParamInfo(from:)`, which differ
 /// only in the attribute name they look for.
 private func argumentLists(
@@ -192,7 +197,9 @@ private func argumentLists(
 }
 
 /// Extracts the literal string values from an array-literal expression, or
-/// `nil` if `expr` isn't an array-literal expression. Non-string-literal
+/// `nil` if `expr` isn't an array-literal expression.
+///
+/// Non-string-literal
 /// elements are silently dropped via `compactMap`.
 private func extractStringArrayLiterals(from expr: ExprSyntax) -> [String]? {
     guard let arrayExpr = expr.as(ArrayExprSyntax.self) else { return nil }
@@ -242,7 +249,9 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
     return values
 }
 
-/// The `@OperationParam(aliases:)` argument label. Also the `ParamMeta`
+/// The `@OperationParam(aliases:)` argument label.
+///
+/// Also the `ParamMeta`
 /// initializer argument label `synthesizeParameterMetadata(from:in:)` emits
 /// for it, since `@OperationParam`'s array-valued arguments round-trip
 /// directly into `ParamMeta`'s same-named initializer arguments — the two
@@ -252,13 +261,17 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
 private let aliasesLabel = "aliases"
 
 /// The `@OperationParam(allowedValues:)` argument label, and the
-/// corresponding `ParamMeta(allowedValues:)` initializer argument label. See
+/// corresponding `ParamMeta(allowedValues:)` initializer argument label.
+///
+/// See
 /// `aliasesLabel`'s documentation for why the two labels coincide, and why
 /// this is the single source of truth for this name.
 private let allowedValuesLabel = "allowedValues"
 
 /// Labels of `@OperationParam(...)` arguments whose value is a string-array
-/// literal. Driving `operationParamInfo(from:)`'s loop from this table —
+/// literal.
+///
+/// Driving `operationParamInfo(from:)`'s loop from this table —
 /// rather than one hand-written `case` branch per label — keeps `aliases`
 /// and `allowedValues` a single code path instead of two copies that differ
 /// only by name.
@@ -266,6 +279,7 @@ private let operationParamArrayArgumentLabels = [aliasesLabel, allowedValuesLabe
 
 /// Applies a single `@OperationParam(...)` argument to the accumulated
 /// `short`/array-argument state, if it matches a recognized argument label.
+///
 /// Unrecognized labels (and labels whose value doesn't match the expected
 /// shape) are left untouched. Extracted from `operationParamInfo(from:)`'s
 /// inner loop so that function's control flow doesn't nest a loop inside a
@@ -382,7 +396,9 @@ public struct OperationMacro: ExtensionMacro {
 }
 
 /// Diagnoses `expr` (via `context`) against `diagnostic`'s non-empty-string
-/// requirement when it is absent or an empty string literal. Shared by the
+/// requirement when it is absent or an empty string literal.
+///
+/// Shared by the
 /// `verb` and `noun` checks in `verbNounDescriptionText(from:node:in:)`,
 /// which otherwise differ only in the expression and diagnostic case.
 ///
@@ -437,7 +453,9 @@ private func verbNounDescriptionText(
 }
 
 /// Diagnoses `propertyName` (via `context`) as having an unsupported
-/// parameter type at `location`. Shared by both unsupported-type call sites
+/// parameter type at `location`.
+///
+/// Shared by both unsupported-type call sites
 /// in `synthesizeParameterMetadata(from:in:)` — a missing type annotation
 /// and a type `paramTypeInfo(for:)` can't map — which otherwise differ only
 /// in the diagnostic's location.
@@ -450,7 +468,9 @@ private func diagnoseUnsupportedParameterType(
 }
 
 /// Formats `"\(key): [...]"` as the source text of a `ParamMeta(...)`
-/// array-valued argument. Shared by the `aliases` and `allowedValues`
+/// array-valued argument.
+///
+/// Shared by the `aliases` and `allowedValues`
 /// entries in `synthesizeParameterMetadata(from:in:)`, which otherwise
 /// differ only in the key, source collection, and when the argument is
 /// omitted entirely.
