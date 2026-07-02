@@ -29,12 +29,6 @@ extension SchemaFusionError: CustomStringConvertible {
     }
 }
 
-/// The fused schema's discriminator property name.
-private let opFieldName = "op"
-
-/// The fused schema's discriminator property description.
-private let opFieldDescription = "The operation to perform, as \"verb noun\"."
-
 /// Builds the flat-union `GenerationSchema` a fused `OperationTool` presents
 /// to the model, from the `AnyOperation` metadata of every operation it
 /// carries.
@@ -75,11 +69,11 @@ public enum SchemaFusion {
         description: String? = nil
     ) throws -> GenerationSchema {
         let opProperty = DynamicGenerationSchema.Property(
-            name: opFieldName,
-            description: opFieldDescription,
+            name: OperationKeys.opFieldName,
+            description: OperationKeys.opFieldDescription,
             schema: DynamicGenerationSchema(
-                name: opFieldName,
-                description: opFieldDescription,
+                name: OperationKeys.opFieldName,
+                description: OperationKeys.opFieldDescription,
                 anyOf: operations.map(\.opString)
             ),
             isOptional: false
@@ -104,7 +98,7 @@ public enum SchemaFusion {
 
         for (opIndex, operation) in operations.enumerated() {
             for parameter in operation.parameters {
-                guard normalizedForOpCollisionCheck(parameter.name) != opFieldName else {
+                guard OperationKeys.normalized(parameter.name) != OperationKeys.opFieldName else {
                     throw SchemaFusionError.reservedParameterName(opString: operation.opString, parameter: parameter.name)
                 }
                 guard firstSeen[parameter.name] == nil else { continue }
@@ -177,17 +171,3 @@ private func dynamicSchema(for type: ParamType) -> DynamicGenerationSchema {
     }
 }
 
-/// Normalizes a parameter name for the reserved-`"op"`-name check:
-/// lowercased with `_`/`-` separators removed, so `"Op"`, `"_op"`, and
-/// `"o-p"` are all caught alongside a literal `"op"`.
-///
-/// Mirrors `OperationsMacros`' identically named check; duplicated here
-/// (rather than shared) because the macro's version lives in a
-/// compiler-plugin target this library cannot depend on at runtime — the
-/// macro validates a single operation's fields at expansion time, this
-/// function validates the same rule across many operations' fields at
-/// fusion time, including for operations the macro never saw (the manual
-/// escape hatch).
-private func normalizedForOpCollisionCheck(_ name: String) -> String {
-    name.lowercased().filter { $0 != "_" && $0 != "-" }
-}

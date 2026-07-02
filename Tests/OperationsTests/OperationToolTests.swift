@@ -1,0 +1,313 @@
+import FoundationModels
+import Testing
+
+@testable import Operations
+
+/// Shared `Context` for every `OperationTool` fixture operation below.
+/// Dispatch correctness is verified through each operation's JSON output,
+/// so the context itself carries no mutable state.
+private struct ToolFixtureContext: Sendable {}
+
+/// JSON-encodable result produced by `AddNoteToolFixture.execute(in:)`.
+private struct AddNoteOutput: Encodable, Sendable, Equatable {
+    let title: String
+    let tags: [String]
+    let authorName: String?
+}
+
+/// `add note` fixture: a required `title` (aliased `name`), an optional
+/// `tags` array (aliased `labels`), and an optional `authorName` — the last
+/// exercising camelCase/snake_case key normalization (no declared alias).
+private struct AddNoteToolFixture: OperationDefinition {
+    typealias Context = ToolFixtureContext
+    typealias Output = AddNoteOutput
+
+    var title: String
+    var tags: [String]
+    var authorName: String?
+
+    static let verb = "add"
+    static let noun = "note"
+    static let operationDescription = "Create a new note"
+    static let parameterMetadata: [ParamMeta] = [
+        ParamMeta(name: "title", type: .string, required: true, description: "The note title", aliases: ["name"]),
+        ParamMeta(name: "tags", type: .array(of: .string), required: false, description: "Tags to attach", aliases: ["labels"]),
+        ParamMeta(name: "authorName", type: .string, required: false, description: "The note's author"),
+    ]
+
+    static var generationSchema: GenerationSchema {
+        GenerationSchema(type: AddNoteToolFixture.self, description: operationDescription, properties: [])
+    }
+
+    init(_ content: GeneratedContent) throws {
+        title = try content.value(String.self, forProperty: "title")
+        tags = (try? content.value([String].self, forProperty: "tags")) ?? []
+        authorName = try content.value(String?.self, forProperty: "authorName")
+    }
+
+    var generatedContent: GeneratedContent {
+        GeneratedContent(properties: ["title": title, "tags": tags])
+    }
+
+    func execute(in context: ToolFixtureContext) async throws -> AddNoteOutput {
+        AddNoteOutput(title: title, tags: tags, authorName: authorName)
+    }
+}
+
+/// JSON-encodable result produced by `DeleteNoteToolFixture.execute(in:)`.
+private struct DeleteNoteOutput: Encodable, Sendable, Equatable {
+    let id: String
+}
+
+/// `delete note` fixture: a single required `id`, giving the resolver a
+/// second op to disambiguate against and to list on an unknown-op failure.
+private struct DeleteNoteToolFixture: OperationDefinition {
+    typealias Context = ToolFixtureContext
+    typealias Output = DeleteNoteOutput
+
+    var id: String
+
+    static let verb = "delete"
+    static let noun = "note"
+    static let operationDescription = "Delete a note by id"
+    static let parameterMetadata: [ParamMeta] = [
+        ParamMeta(name: "id", type: .string, required: true, description: "The note id")
+    ]
+
+    static var generationSchema: GenerationSchema {
+        GenerationSchema(type: DeleteNoteToolFixture.self, description: operationDescription, properties: [])
+    }
+
+    init(_ content: GeneratedContent) throws {
+        id = try content.value(String.self, forProperty: "id")
+    }
+
+    var generatedContent: GeneratedContent {
+        GeneratedContent(properties: ["id": id])
+    }
+
+    func execute(in context: ToolFixtureContext) async throws -> DeleteNoteOutput {
+        DeleteNoteOutput(id: id)
+    }
+}
+
+@Suite struct OperationToolTests {
+
+    private func makeTool(
+        resolver: OperationResolver = OperationResolver(),
+        retryCap: Int = 2
+    ) throws -> OperationTool<ToolFixtureContext> {
+        try OperationTool(
+            name: "notes",
+            description: "Note operations",
+            context: ToolFixtureContext(),
+            operations: [
+                AnyOperation(AddNoteToolFixture.self),
+                AnyOperation(DeleteNoteToolFixture.self),
+            ],
+            resolver: resolver,
+            retryCap: retryCap
+        )
+    }
+
+    // MARK: - Tool conformance
+
+    @Test func operationToolCanBeRegisteredOnALanguageModelSession() throws {
+        let tool = try makeTool()
+
+        let session = LanguageModelSession(tools: [tool], instructions: "Test session")
+
+        #expect(session.transcript.isEmpty == false)
+    }
+
+    // MARK: - Dispatch: exact / aliased / reordered op strings
+
+    @Test func dispatchesExactOpString() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add note", "title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func dispatchesCaseInsensitiveOpString() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "ADD NOTE", "title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func dispatchesReorderedOpString() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "note add", "title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func dispatchesVerbAliasOpString() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "create note", "title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func dispatchesCaseInsensitiveVerbAliasOpString() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "CREATE NOTE", "title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func dispatchesSeparatorNormalizedOpString() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add_note", "title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    // MARK: - Unknown op: returned, not thrown
+
+    @Test func unknownOpReturnsCorrectiveMessageListingValidOps() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "frobnicate widget"])
+
+        let message = try await tool.call(arguments: arguments)
+
+        #expect(message.contains("add note"))
+        #expect(message.contains("delete note"))
+    }
+
+    @Test func missingOpFieldEntirelyReturnsCorrectiveMessage() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["title": "Groceries"])
+
+        let message = try await tool.call(arguments: arguments)
+
+        #expect(message.contains("add note"))
+    }
+
+    // MARK: - Missing required: returned, not thrown
+
+    @Test func missingRequiredReturnsCorrectiveMessageNamingTheParameter() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add note"])
+
+        let message = try await tool.call(arguments: arguments)
+
+        #expect(message.contains("title"))
+    }
+
+    // MARK: - Key-alias normalization
+
+    @Test func keyAliasResolvesDeclaredAliasToCanonicalName() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add note", "name": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func keyAliasCamelSnakeNormalizationResolvesUnaliasedParameter() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add note", "title": "Groceries", "author_name": "Ann"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"authorName\":\"Ann\""))
+    }
+
+    @Test func explicitCanonicalKeyIsNeverOverriddenByAnAlias() async throws {
+        let tool = try makeTool()
+        // Both the canonical "title" and its alias "name" are present;
+        // the canonical value must win.
+        let arguments = GeneratedContent(properties: ["op": "add note", "title": "Canonical", "name": "Aliased"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Canonical\""))
+    }
+
+    // MARK: - Inference hook
+
+    @Test func inferenceHookProposesOpStringWhenOpFieldIsAbsent() async throws {
+        let resolver = OperationResolver(inferOp: { content in
+            // Infers "add note" whenever a "title" field is present and no
+            // explicit "op" was given.
+            (try? content.value(String.self, forProperty: "title")) != nil ? "add note" : nil
+        })
+        let tool = try makeTool(resolver: resolver)
+        let arguments = GeneratedContent(properties: ["title": "Groceries"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+    }
+
+    // MARK: - Extra `op` key tolerance (stripped before typed construction)
+
+    @Test func extraOpKeyDoesNotBreakTypedConstruction() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add note", "title": "Groceries", "tags": ["errands"]])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"title\":\"Groceries\""))
+        #expect(json.contains("\"tags\":[\"errands\"]"))
+    }
+
+    // MARK: - Retry cap
+
+    @Test func retryCapReturnsTerminalMessageOnlyOnTheThirdConsecutiveFailure() async throws {
+        let tool = try makeTool(retryCap: 2)
+        let arguments = GeneratedContent(properties: ["op": "frobnicate widget"])
+
+        let first = try await tool.call(arguments: arguments)
+        let second = try await tool.call(arguments: arguments)
+        let third = try await tool.call(arguments: arguments)
+
+        #expect(first.contains("add note"))
+        #expect(second.contains("add note"))
+        #expect(first == second)
+        #expect(third != first)
+        #expect(third.contains("stopping"))
+    }
+
+    @Test func retryCapCounterResetsAfterASuccessfulDispatch() async throws {
+        let tool = try makeTool(retryCap: 2)
+        let badArguments = GeneratedContent(properties: ["op": "frobnicate widget"])
+        let goodArguments = GeneratedContent(properties: ["op": "add note", "title": "Groceries"])
+
+        _ = try await tool.call(arguments: badArguments)
+        _ = try await tool.call(arguments: goodArguments)
+        let afterSuccess = try await tool.call(arguments: badArguments)
+
+        #expect(afterSuccess.contains("add note"))
+        #expect(afterSuccess.contains("stopping") == false)
+    }
+
+    @Test func retryCapCounterResetsAfterTheTerminalMessage() async throws {
+        let tool = try makeTool(retryCap: 2)
+        let arguments = GeneratedContent(properties: ["op": "frobnicate widget"])
+
+        _ = try await tool.call(arguments: arguments)
+        _ = try await tool.call(arguments: arguments)
+        let terminal = try await tool.call(arguments: arguments)
+        let afterTerminal = try await tool.call(arguments: arguments)
+
+        #expect(terminal.contains("stopping"))
+        #expect(afterTerminal.contains("add note"))
+        #expect(afterTerminal.contains("stopping") == false)
+    }
+}

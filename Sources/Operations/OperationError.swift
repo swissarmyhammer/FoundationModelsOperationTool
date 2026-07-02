@@ -26,3 +26,30 @@ public enum OperationError: Error, Sendable, Equatable {
     /// The operation's `execute(in:)` threw.
     case executionFailed
 }
+
+extension OperationError: CustomStringConvertible {
+    /// A human-readable, model- and CLI-facing summary of the failure.
+    ///
+    /// `OperationTool.call(arguments:)` returns this text as its corrective
+    /// output for `.unknownOperation` and `.missingRequired` (values it
+    /// constructs itself from the resolver's outcome) and for
+    /// `.decodingFailed` (caught from `AnyOperation.run`) — see plan.md's
+    /// "Error handling — return, don't throw". `.executionFailed` and
+    /// `.encodingFailed` aren't part of that contract (`OperationTool`
+    /// rethrows them as fatal), but still describe themselves here for
+    /// consistent logging.
+    public var description: String {
+        switch self {
+        case let .unknownOperation(valid):
+            return "Unknown operation. Valid operations: \(valid.joined(separator: ", "))."
+        case let .missingRequired(names):
+            return "Missing required parameter(s): \(names.joined(separator: ", "))."
+        case .decodingFailed:
+            return "Could not parse the given parameter values for this operation."
+        case .encodingFailed:
+            return "Could not encode this operation's result."
+        case .executionFailed:
+            return "This operation failed while executing."
+        }
+    }
+}
