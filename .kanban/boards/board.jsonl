@@ -1,0 +1,1 @@
+{"id":"01KWHQBZMSZCD3T190MRWRDFR4","timestamp":"2026-07-02T15:32:43.289882Z","op":"create","item_id":"board","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1 @@\n+name: FoundationModelsOperationTool\n","reverse_patch":"--- original\n+++ modified\n@@ -1 +0,0 @@\n-name: FoundationModelsOperationTool\n","transaction_id":null}
