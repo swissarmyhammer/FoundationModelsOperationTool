@@ -249,6 +249,31 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
 /// copies that differ only by name.
 private let operationParamArrayArgumentLabels = ["aliases", "allowedValues"]
 
+/// Applies a single `@OperationParam(...)` argument to the accumulated
+/// `short`/array-argument state, if it matches a recognized argument label.
+/// Unrecognized labels (and labels whose value doesn't match the expected
+/// shape) are left untouched. Extracted from `operationParamInfo(from:)`'s
+/// inner loop so that function's control flow doesn't nest a loop inside a
+/// loop inside a conditional.
+private func applyOperationParamArgument(
+    _ argument: LabeledExprListSyntax.Element,
+    short: inout Character?,
+    arrayArguments: inout [String: [String]]
+) {
+    guard let label = argument.label?.text else { return }
+
+    if label == "short" {
+        guard let literal = argument.expression.plainStringLiteralValue, let first = literal.first else { return }
+        short = first
+        return
+    }
+
+    guard operationParamArrayArgumentLabels.contains(label),
+        let values = extractStringArrayLiterals(from: argument.expression)
+    else { return }
+    arrayArguments[label] = values
+}
+
 /// CLI affordances recognized from a property's `@OperationParam(...)`
 /// attribute.
 private func operationParamInfo(
@@ -259,16 +284,7 @@ private func operationParamInfo(
 
     for arguments in argumentLists(forAttributeNamed: "OperationParam", in: attributes) {
         for argument in arguments {
-            guard let label = argument.label?.text else { continue }
-            if label == "short" {
-                if let literal = argument.expression.plainStringLiteralValue, let first = literal.first {
-                    short = first
-                }
-            } else if operationParamArrayArgumentLabels.contains(label),
-                let values = extractStringArrayLiterals(from: argument.expression)
-            {
-                arrayArguments[label] = values
-            }
+            applyOperationParamArgument(argument, short: &short, arrayArguments: &arrayArguments)
         }
     }
 
