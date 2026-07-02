@@ -1,0 +1,4 @@
+.sah/
+.shell/
+.build/
+.DS_Store
