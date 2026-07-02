@@ -61,7 +61,7 @@ extension OperationResolver {
     /// One registered operation's identity, as `matchOpString` needs it:
     /// its `verb`/`noun` pair to match against (independent of `Context`,
     /// unlike `AnyOperation`) and the canonical `opString` to return.
-    struct OpCandidate {
+    internal struct OpCandidate {
         let verb: String
         let noun: String
         let opString: String
@@ -73,7 +73,7 @@ extension OperationResolver {
     /// - Parameter content: The payload to inspect.
     /// - Returns: The candidate op string to resolve, or `nil` if neither
     ///   source produced one.
-    func extractedOpString(from content: GeneratedContent) -> String? {
+    internal func extractedOpString(from content: GeneratedContent) -> String? {
         if let explicit = try? content.value(String.self, forProperty: OperationKeys.opFieldName),
             !explicit.isEmpty
         {
@@ -90,7 +90,7 @@ extension OperationResolver {
     ///   - candidates: Every registered operation's `verb`/`noun`/`opString`.
     /// - Returns: The matching candidate's canonical `opString`, or `nil` if
     ///   none match.
-    func matchOpString(_ opString: String, against candidates: [OpCandidate]) -> String? {
+    internal func matchOpString(_ opString: String, against candidates: [OpCandidate]) -> String? {
         let tokens = Self.spaceSeparatedTokens(opString)
         guard tokens.count == 2 else {
             let joined = tokens.joined(separator: " ")
@@ -122,7 +122,7 @@ extension OperationResolver {
 extension OperationResolver {
     /// The result of resolving a payload's properties against one
     /// operation's declared parameters.
-    struct ParameterResolution {
+    internal struct ParameterResolution {
         /// A new payload containing only the recognized parameters, under
         /// their canonical names — dropping `op` and any other unrecognized
         /// key, which also sidesteps whether the target operation's
@@ -150,7 +150,7 @@ extension OperationResolver {
     ///   - parameters: The target operation's declared parameters.
     /// - Returns: The rebuilt, canonically-keyed payload plus any missing
     ///   required parameter names.
-    func resolveParameters(_ content: GeneratedContent, matching parameters: [ParamMeta]) -> ParameterResolution {
+    internal func resolveParameters(_ content: GeneratedContent, matching parameters: [ParamMeta]) -> ParameterResolution {
         let rawProperties = Self.structureProperties(of: content)
         var normalizedIndex: [String: String] = [:]
         for rawKey in rawProperties.keys where normalizedIndex[OperationKeys.normalized(rawKey)] == nil {

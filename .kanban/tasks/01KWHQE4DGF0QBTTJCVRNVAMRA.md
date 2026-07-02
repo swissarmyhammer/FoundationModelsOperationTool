@@ -40,6 +40,27 @@ comments:
   id: 01kwjhe64reqqv3rd7p8pmphx1
   text: 'Round-2 verification: clean `.build` removal + `swift build` (0 warnings) + `swift test` all green — 67/67 tests passed across 3 test bundles (OperationsTests: 40/40, OperationsMacrosTests: 26/26, OperationsCLITests: 1/1), 0 failures. Confirmed both review-finding fixes are present exactly as prescribed: `OperationResolver.swift` renames `matchOpString(_ opString:...)` and `spaceSeparatedTokens(_ text:...)` with docstrings updated; `SchemaFusion.swift` hoists `opName`/`opDescription` locals reused across both the outer `Property` and inner `DynamicGenerationSchema` constructors. No code changes were needed this round.'
   timestamp: 2026-07-02T23:08:18.456107+00:00
+- actor: wballard
+  id: 01kwjj7hs8neenawg0qrxbbcxb
+  text: |-
+    Addressed all 5 review findings from 2026-07-02 18:09 (missing explicit access modifiers in `OperationResolver.swift`):
+
+    - `struct OpCandidate` → `internal struct OpCandidate`
+    - `func extractedOpString(...)` → `internal func extractedOpString(...)`
+    - `func matchOpString(...)` → `internal func matchOpString(...)`
+    - `struct ParameterResolution` → `internal struct ParameterResolution`
+    - `func resolveParameters(...)` → `internal func resolveParameters(...)`
+
+    Verified `internal` (not `public`) is correct: `OpCandidate`/`ParameterResolution`/`extractedOpString`/`matchOpString`/`resolveParameters` are all consumed only from `OperationTool.swift`, in the same `Operations` module — no cross-module callers.
+
+    **Swept `OperationKeys.swift` and `OperationTool.swift` for the same rule, per the task's instructions:**
+    - `OperationKeys.swift`: `enum OperationKeys` → `internal enum OperationKeys`; `static func normalized(...)` → `internal static func normalized(...)`. The two `static let` properties (`opFieldName`, `opFieldDescription`) were left unmarked — consistent with the codebase's own established convention (the review itself never flagged `OpCandidate`'s/`ParameterResolution`'s adjacent stored `let` fields on the same reviewed lines), and confirmed via `code_context` grep that `OperationKeys` is only referenced from `SchemaFusion.swift` and `OperationResolver.swift`, both in-module — `internal` is correct.
+    - `OperationTool.swift`: inside `private actor RetryState`, two unmarked methods `recordFailure(cap:)` and `reset()` needed an explicit modifier. Tried `private` first — broke the build, since `private` restricts access to the enclosing declaration itself (not the file), and these methods are called from `OperationTool.call`/`recordCorrective` elsewhere in the same file. Used `fileprivate` instead, which matches `RetryState`'s own top-level-`private` (= file-scoped) reach without over- or under-restricting.
+
+    **Verification:** `rm -rf .build && swift build` — clean, 0 warnings, 0 errors. `swift test` — 67/67 tests green across all 3 test bundles (40 OperationsTests, 26 OperationsMacrosTests, 1 OperationsCLITests), 0 failures. Adversarial `double-check` agent independently re-ran build+test, confirmed all 5 findings correctly fixed, sanity-checked the `internal`/`fileprivate` modifier choices, and confirmed no other unmarked struct/enum/func declarations remain in the three files. Verdict: PASS.
+
+    All checklist items (including both prior review-finding rounds) now checked off. Task left in `doing`, ready for `/review`.
+  timestamp: 2026-07-02T23:22:09.576249+00:00
 depends_on:
 - 01KWHQCVGNFHVT0ZKEDAG802RR
 - 01KWHQDMN1ZA38C5HF7ZPPXP1Y
@@ -76,3 +97,11 @@ Fixtures: use hand-conformed (no-macro) operation structs — this task does not
 - [x] `Sources/Operations/OperationResolver.swift:80` — Parameter `input: String` is weakly typed and should describe its role; `input` is generic and doesn't convey that this is an operation string being matched. Rename to `opString` or `candidateOpString` to compensate for the weak type information. Rename the parameter from `input` to `opString`: `func matchOpString(_ opString: String, against candidates: [OpCandidate]) -> String?` and update the docstring and usage within the function body.
 - [x] `Sources/Operations/OperationResolver.swift:102` — Parameter `input: String` is weakly typed and should describe its role; `input` is generic and doesn't convey that this is a string being tokenized. Rename to `text`, `stringToTokenize`, or similar to compensate for the weak type information, consistent with the rule applied to other weak-type parameters. Rename the parameter from `input` to `text` or `stringToTokenize`: `private static func spaceSeparatedTokens(_ text: String) -> [String]` and update the docstring and usage within the function body.
 - [x] `Sources/Operations/SchemaFusion.swift:63` — The `op` field name and description properties are repeated verbatim across the outer Property and inner DynamicGenerationSchema constructors (lines 63-64 and 66-67). Copies can drift out of sync; extract to variables to establish a single source of truth. Extract to local variables before the Property constructor: `let opName = OperationKeys.opFieldName; let opDesc = OperationKeys.opFieldDescription`, then use these variables in both the Property and schema constructors.
+
+## Review Findings (2026-07-02 18:09)
+
+- [x] `Sources/Operations/OperationResolver.swift:64` — Nested type `OpCandidate` lacks explicit access modifier; library declarations should spell access control explicitly rather than leaning on the implicit `internal` default. Add explicit `internal` access modifier: `internal struct OpCandidate { … }`.
+- [x] `Sources/Operations/OperationResolver.swift:76` — Method `extractedOpString` lacks explicit access modifier; library declarations should spell access control explicitly rather than leaning on the implicit `internal` default. Add explicit `internal` access modifier: `internal func extractedOpString(…)`.
+- [x] `Sources/Operations/OperationResolver.swift:93` — Method `matchOpString` lacks explicit access modifier; library declarations should spell access control explicitly rather than leaning on the implicit `internal` default. Add explicit `internal` access modifier: `internal func matchOpString(…)`.
+- [x] `Sources/Operations/OperationResolver.swift:125` — Nested type `ParameterResolution` lacks explicit access modifier; library declarations should spell access control explicitly rather than leaning on the implicit `internal` default. Add explicit `internal` access modifier: `internal struct ParameterResolution { … }`.
+- [x] `Sources/Operations/OperationResolver.swift:151` — Method `resolveParameters` lacks explicit access modifier; library declarations should spell access control explicitly rather than leaning on the implicit `internal` default. Add explicit `internal` access modifier: `internal func resolveParameters(…)`.

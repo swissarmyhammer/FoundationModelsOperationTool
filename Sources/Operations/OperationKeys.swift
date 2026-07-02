@@ -6,7 +6,7 @@
 /// to treat names that differ only by case or `_`/`-` separators as the same
 /// key. This is the single place that defines what "the same, ignoring case
 /// and separators" means, so the two call sites can't drift apart.
-enum OperationKeys {
+internal enum OperationKeys {
     /// The fused schema's discriminator property name.
     static let opFieldName = "op"
 
@@ -17,7 +17,7 @@ enum OperationKeys {
     /// lowercased with `_`/`-` separators removed, so `"Op"`, `"_op"`,
     /// `"o-p"`, and `"noteTitle"`/`"note_title"`/`"note-title"` all compare
     /// equal.
-    static func normalized(_ name: String) -> String {
+    internal static func normalized(_ name: String) -> String {
         name.lowercased().filter { $0 != "_" && $0 != "-" }
     }
 }

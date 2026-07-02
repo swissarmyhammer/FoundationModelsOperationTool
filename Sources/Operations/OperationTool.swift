@@ -173,7 +173,7 @@ private actor RetryState {
     /// - Parameter cap: The number of consecutive corrective failures
     ///   allowed before the caller should switch to a terminal message.
     /// - Returns: `true` once this failure is the `cap + 1`th in a row.
-    func recordFailure(cap: Int) -> Bool {
+    fileprivate func recordFailure(cap: Int) -> Bool {
         consecutiveFailures += 1
         let exceeded = consecutiveFailures > cap
         if exceeded {
@@ -183,7 +183,7 @@ private actor RetryState {
     }
 
     /// Resets the counter to zero, e.g. after a successful dispatch.
-    func reset() {
+    fileprivate func reset() {
         consecutiveFailures = 0
     }
 }
