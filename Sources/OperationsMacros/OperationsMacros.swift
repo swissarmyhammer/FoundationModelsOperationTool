@@ -242,12 +242,27 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
     return values
 }
 
+/// The `@OperationParam(aliases:)` argument label. Also the `ParamMeta`
+/// initializer argument label `synthesizeParameterMetadata(from:in:)` emits
+/// for it, since `@OperationParam`'s array-valued arguments round-trip
+/// directly into `ParamMeta`'s same-named initializer arguments — the two
+/// must agree by design. The single source of truth for this name; every
+/// other reference in this file uses this constant instead of repeating the
+/// literal.
+private let aliasesLabel = "aliases"
+
+/// The `@OperationParam(allowedValues:)` argument label, and the
+/// corresponding `ParamMeta(allowedValues:)` initializer argument label. See
+/// `aliasesLabel`'s documentation for why the two labels coincide, and why
+/// this is the single source of truth for this name.
+private let allowedValuesLabel = "allowedValues"
+
 /// Labels of `@OperationParam(...)` arguments whose value is a string-array
-/// literal, keyed by label text. Driving `operationParamInfo(from:)`'s loop
-/// from this table — rather than one hand-written `case` branch per label —
-/// keeps `aliases` and `allowedValues` a single code path instead of two
-/// copies that differ only by name.
-private let operationParamArrayArgumentLabels = ["aliases", "allowedValues"]
+/// literal. Driving `operationParamInfo(from:)`'s loop from this table —
+/// rather than one hand-written `case` branch per label — keeps `aliases`
+/// and `allowedValues` a single code path instead of two copies that differ
+/// only by name.
+private let operationParamArrayArgumentLabels = [aliasesLabel, allowedValuesLabel]
 
 /// Applies a single `@OperationParam(...)` argument to the accumulated
 /// `short`/array-argument state, if it matches a recognized argument label.
@@ -288,7 +303,7 @@ private func operationParamInfo(
         }
     }
 
-    return (short, arrayArguments["aliases"] ?? [], arrayArguments["allowedValues"])
+    return (short, arrayArguments[aliasesLabel] ?? [], arrayArguments[allowedValuesLabel])
 }
 
 // MARK: - `@Operation`
@@ -509,13 +524,13 @@ private func synthesizeParameterMetadata(
                 args.append("short: \(swiftStringLiteral(String(short)))")
             }
             if !operationParam.aliases.isEmpty {
-                args.append(arrayArgumentText(key: "aliases", values: operationParam.aliases))
+                args.append(arrayArgumentText(key: aliasesLabel, values: operationParam.aliases))
             }
             // Unlike `aliases`, `allowedValues` distinguishes "unset" (`nil`, no
             // constraint) from "set to an empty closed set" (`[]`), so it's
             // appended whenever non-nil rather than gated on non-empty.
             if let allowedValues {
-                args.append(arrayArgumentText(key: "allowedValues", values: allowedValues))
+                args.append(arrayArgumentText(key: allowedValuesLabel, values: allowedValues))
             }
 
             paramMetaEntries.append("ParamMeta(\(args.joined(separator: ", ")))")
