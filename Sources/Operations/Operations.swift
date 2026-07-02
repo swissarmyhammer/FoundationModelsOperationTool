@@ -16,15 +16,23 @@ import FoundationModels
 /// `@Guide(description:)` / doc-comment description, `@OperationParam`
 /// short/aliases/allowedValues).
 ///
-/// The macro-generated `ArgumentParser` `Command` for the dual-use CLI is
-/// synthesized by a later task; this macro covers metadata only.
+/// It also emits a nested `Command: AsyncParsableCommand` (ArgumentParser
+/// leaf) for the dual-use CLI: a `@Flag`/`@Option` per stored property
+/// (`Bool` ⇒ flag, arrays ⇒ repeatable option, `Optional` ⇒ non-required
+/// option, everything else ⇒ required option), a `CommandConfiguration`
+/// named after `verb`, and a `run()` that serializes the parsed values into
+/// the canonical `op` + fields payload — the identical shape the model path
+/// sends to `AnyOperation.run`.
 ///
 /// - Parameters:
 ///   - verb: The action the operation performs (e.g. `"add"`).
 ///   - noun: The resource the operation acts on (e.g. `"note"`).
 ///   - description: A human- and model-facing summary of what the operation
 ///     does.
-@attached(extension, conformances: OperationDefinition, names: named(verb), named(noun), named(operationDescription), named(parameterMetadata))
+@attached(
+    extension, conformances: OperationDefinition,
+    names: named(verb), named(noun), named(operationDescription), named(parameterMetadata), named(Command)
+)
 public macro Operation(verb: String, noun: String, description: String) =
     #externalMacro(module: "OperationsMacros", type: "OperationMacro")
 

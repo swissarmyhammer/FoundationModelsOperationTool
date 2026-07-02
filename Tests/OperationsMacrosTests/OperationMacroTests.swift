@@ -39,6 +39,31 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let parameterMetadata: [ParamMeta] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title"),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+                        @Option(help: "The note title")
+                        var title: String
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            payload.append(("title", title))
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -83,6 +108,43 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "body", type: .string, required: false, description: "Markdown body of the note"),
                         ParamMeta(name: "tags", type: .array(of: .string), required: false, description: "Tags to attach"),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+                        @Option(help: "The note title")
+                        var title: String
+
+                        @Option(help: "Markdown body of the note")
+                        var body: String?
+
+                        @Option(help: "Tags to attach")
+                        var tags: [String] = []
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            payload.append(("title", title))
+                            if let body {
+                                payload.append(("body", body))
+                            }
+                            if !tags.isEmpty {
+                                payload.append(("tags", tags))
+                            }
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -134,6 +196,47 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "pinned", type: .boolean, required: true, description: "Whether the note is pinned"),
                         ParamMeta(name: "scores", type: .array(of: .integer), required: true, description: "Scores for each revision"),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "update", abstract: "Update a note")
+
+                        @Option(help: "How many times the note was viewed")
+                        var viewCount: Int
+
+                        @Option(help: "The note's average rating")
+                        var rating: Double?
+
+                        @Flag(help: "Whether the note is pinned")
+                        var pinned: Bool = false
+
+                        @Option(help: "Scores for each revision")
+                        var scores: [Int] = []
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", UpdateNote.opString)]
+                            payload.append(("viewCount", viewCount))
+                            if let rating {
+                                payload.append(("rating", rating))
+                            }
+                            payload.append(("pinned", pinned))
+                            if !scores.isEmpty {
+                                payload.append(("scores", scores))
+                            }
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -158,6 +261,30 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let noun: String = "notes"
                     static let operationDescription: String = "List every note"
                     static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "list", abstract: "List every note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", ListNotes.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -190,6 +317,31 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let parameterMetadata: [ParamMeta] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title", short: "t", aliases: ["name"]),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+                        @Option(name: [.long, .customShort("t")], help: "The note title")
+                        var title: String
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            payload.append(("title", title))
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -220,6 +372,31 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let parameterMetadata: [ParamMeta] = [
                         ParamMeta(name: "priority", type: .string, required: true, description: "The note priority", allowedValues: ["low", "medium", "high"]),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+                        @Option(help: "The note priority")
+                        var priority: String
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            payload.append(("priority", priority))
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -256,6 +433,31 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let parameterMetadata: [ParamMeta] = [
                         ParamMeta(name: "priority", type: .string, required: true, description: "The note priority", allowedValues: []),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+                        @Option(help: "The note priority")
+                        var priority: String
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            payload.append(("priority", priority))
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -286,6 +488,31 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let parameterMetadata: [ParamMeta] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title"),
                     ]
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+                        @Option(help: "The note title")
+                        var title: String
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            payload.append(("title", title))
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -312,6 +539,30 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             diagnostics: [
@@ -344,6 +595,30 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             diagnostics: [
@@ -378,6 +653,30 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             diagnostics: [
@@ -410,6 +709,30 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             diagnostics: [
@@ -439,6 +762,30 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     static let noun: String = ""
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
                 }
                 """,
             diagnostics: [

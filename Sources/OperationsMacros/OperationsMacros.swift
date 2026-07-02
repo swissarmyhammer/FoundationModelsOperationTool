@@ -36,7 +36,7 @@ enum OperationMacroDiagnostic: DiagnosticMessage {
             return "'@Operation' requires a non-empty 'noun' string literal argument"
         case .reservedParameterName(let name):
             return
-                "parameter '\(name)' is reserved: it normalizes to 'op', which collides with the fused-tool discriminator field"
+                "parameter '\(name)' is reserved: it normalizes to '\(opFieldName)', which collides with the fused-tool discriminator field"
         case .unsupportedParameterType(let name):
             return
                 "parameter '\(name)' has an unsupported type; '@Operation' supports String, Int, Double, Float, Bool, Array of those, and Optional wrapping any of those"
@@ -108,9 +108,21 @@ private func swiftStringLiteral(_ value: String) -> String {
 /// argument is absent.
 private let emptyStringLiteralText = "\"\""
 
-/// Normalizes a parameter name for the reserved-`"op"`-name check: lowercased
-/// with `_`/`-` separators removed, so `"Op"`, `"_op"`, and `"o-p"` are all
-/// caught alongside a literal `"op"`.
+/// The fused-tool discriminator field name.
+///
+/// The single source of truth, within
+/// this file, for the reserved parameter name (the reserved-name check, its
+/// diagnostic message, and the discriminator key `commandStructText(...)`
+/// emits into the generated `Command`'s payload all reference this constant
+/// instead of repeating the literal). Mirrors `SchemaFusion.swift`'s
+/// identically named, identically valued `opFieldName` — duplicated rather
+/// than shared because that file lives in a runtime target this
+/// compiler-plugin target cannot depend on.
+private let opFieldName = "op"
+
+/// Normalizes a parameter name for the reserved-`opFieldName`-name check:
+/// lowercased with `_`/`-` separators removed, so `"Op"`, `"_op"`, and
+/// `"o-p"` are all caught alongside a literal `"op"`.
 private func normalizedForReservedCheck(_ name: String) -> String {
     name.lowercased().filter { $0 != "_" && $0 != "-" }
 }
@@ -160,18 +172,85 @@ private func primitiveParamTypeExprText(_ type: TypeSyntax) -> String? {
     return nil
 }
 
+/// Unwraps a single level of `Optional` (`T?`) from `type`, deriving
+/// `required` (`Optional` ⇒ `false`).
+///
+/// Shared by `paramTypeInfo(for:)` and `commandFieldInfo(for:)`, which both
+/// need this same unwrap-and-derive-`required` step before mapping the
+/// wrapped type to their own vocabulary (a `ParamType` source-text
+/// expression, and a `CommandFieldKind`, respectively).
+private func unwrappingOptional(_ type: TypeSyntax) -> (wrapped: TypeSyntax, required: Bool) {
+    if let optionalType = type.as(OptionalTypeSyntax.self) {
+        return (optionalType.wrappedType, false)
+    }
+    return (type, true)
+}
+
 /// Maps a field type to `(ParamType source text, required)`, unwrapping a
 /// single level of `Optional` (`T?`) to derive `required`.
 ///
 /// Returns `nil` for
 /// unsupported types.
 private func paramTypeInfo(for type: TypeSyntax) -> (typeExprText: String, required: Bool)? {
-    if let optionalType = type.as(OptionalTypeSyntax.self) {
-        guard let text = primitiveParamTypeExprText(optionalType.wrappedType) else { return nil }
-        return (text, false)
+    let (wrapped, required) = unwrappingOptional(type)
+    guard let text = primitiveParamTypeExprText(wrapped) else { return nil }
+    return (text, required)
+}
+
+// MARK: - Command field mapping
+
+/// The nested `Command`'s CLI representation of one parameter: which
+/// `ArgumentParser` property wrapper `@Operation` synthesizes for it.
+private enum CommandFieldKind {
+    /// `Bool` ⇒ `@Flag`, a presence-only switch defaulting to `false`.
+    case flag
+
+    /// `[Element]` ⇒ `@Option`, repeatable (one CLI value per occurrence),
+    /// defaulting to an empty array.
+    ///
+    /// `elementTypeText` is the array element's Swift type name (e.g.
+    /// `"String"`), used verbatim in the generated property's type
+    /// annotation.
+    case repeatableOption(elementTypeText: String)
+
+    /// A scalar primitive ⇒ `@Option`.
+    ///
+    /// `typeText` is the property's Swift type name (e.g. `"String"`,
+    /// `"Int"`), used verbatim in the generated property's type annotation.
+    case scalarOption(typeText: String)
+}
+
+/// Maps a non-`Optional` field type to the `CommandFieldKind` `@Operation`
+/// synthesizes for it, or `nil` if the type has no CLI representation.
+///
+/// Array element types are restricted to one level of primitive (no nested
+/// arrays): `ArgumentParser`'s repeatable `@Option` needs its element type to
+/// itself conform to `ExpressibleByArgument`, which none of the primitives'
+/// own array forms do.
+private func commandFieldKind(for type: TypeSyntax) -> CommandFieldKind? {
+    if let arrayType = type.as(ArrayTypeSyntax.self) {
+        guard let elementIdentifier = arrayType.element.as(IdentifierTypeSyntax.self),
+            primitiveTypeMapping[elementIdentifier.name.text] != nil
+        else { return nil }
+        return .repeatableOption(elementTypeText: elementIdentifier.name.text)
     }
-    guard let text = primitiveParamTypeExprText(type) else { return nil }
-    return (text, true)
+    guard let identifierType = type.as(IdentifierTypeSyntax.self),
+        primitiveTypeMapping[identifierType.name.text] != nil
+    else { return nil }
+    return identifierType.name.text == "Bool" ? .flag : .scalarOption(typeText: identifierType.name.text)
+}
+
+/// Maps a field type to `(CommandFieldKind, required)`, unwrapping a single
+/// level of `Optional` (`T?`) to derive `required`.
+///
+/// Returns `nil` when the type has no CLI representation `@Operation` can
+/// generate (e.g. a nested array) — distinct from, and a strict subset of,
+/// the types `paramTypeInfo(for:)` accepts for `ParamMeta`, so such a
+/// property still gets a `ParamMeta` entry but no `Command` field.
+private func commandFieldInfo(for type: TypeSyntax) -> (kind: CommandFieldKind, required: Bool)? {
+    let (wrapped, required) = unwrappingOptional(type)
+    guard let kind = commandFieldKind(for: wrapped) else { return nil }
+    return (kind, required)
 }
 
 // MARK: - `@Guide` / `@OperationParam` introspection
@@ -252,7 +331,7 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
 /// The `@OperationParam(aliases:)` argument label.
 ///
 /// Also the `ParamMeta`
-/// initializer argument label `synthesizeParameterMetadata(from:in:)` emits
+/// initializer argument label `synthesizeOperationParameters(from:in:)` emits
 /// for it, since `@OperationParam`'s array-valued arguments round-trip
 /// directly into `ParamMeta`'s same-named initializer arguments — the two
 /// must agree by design. The single source of truth for this name; every
@@ -326,10 +405,10 @@ private func operationParamInfo(
 /// module.
 ///
 /// Synthesizes `OperationDefinition` conformance on the annotated struct:
-/// `verb`/`noun`/`operationDescription` statics and a `parameterMetadata`
-/// table derived from its stored properties. The macro-generated
-/// `ArgumentParser` `Command` for the dual-use CLI is a separate, later
-/// task — this macro covers metadata only.
+/// `verb`/`noun`/`operationDescription` statics, a `parameterMetadata`
+/// table derived from its stored properties, and a nested `Command:
+/// AsyncParsableCommand` (ArgumentParser leaf) for the dual-use CLI built
+/// from that same property data.
 public struct OperationMacro: ExtensionMacro {
     /// Expands `@Operation(verb:noun:description:)` into an
     /// `OperationDefinition` conformance extension on the annotated struct.
@@ -369,18 +448,27 @@ public struct OperationMacro: ExtensionMacro {
 
         let (verbText, nounText, descriptionText) = verbNounDescriptionText(from: arguments, node: node, in: context)
 
-        let paramMetaEntries = synthesizeParameterMetadata(from: structDecl, in: context)
-        let parameterMetadataText = formatParameterMetadataText(paramMetaEntries)
+        let parameterEntries = synthesizeOperationParameters(from: structDecl, in: context)
+        let parameterMetadataText = formatParameterMetadataText(parameterEntries)
 
         let access = structDecl.modifiers.first(where: \.isNeededAccessLevelModifier)
         let accessText = access.map { "\($0.name.text) " } ?? ""
+
+        let commandText = commandStructText(
+            accessText: accessText,
+            structTypeName: type.trimmedDescription,
+            verbText: verbText,
+            descriptionText: descriptionText,
+            fields: parameterEntries.compactMap(\.commandField)
+        )
 
         let membersText = generateExtensionMembersText(
             accessText: accessText,
             verbText: verbText,
             nounText: nounText,
             descriptionText: descriptionText,
-            parameterMetadataText: parameterMetadataText
+            parameterMetadataText: parameterMetadataText,
+            commandText: commandText
         )
 
         let extensionDecl = try ExtensionDeclSyntax(
@@ -456,7 +544,7 @@ private func verbNounDescriptionText(
 /// parameter type at `location`.
 ///
 /// Shared by both unsupported-type call sites
-/// in `synthesizeParameterMetadata(from:in:)` — a missing type annotation
+/// in `synthesizeOperationParameters(from:in:)` — a missing type annotation
 /// and a type `paramTypeInfo(for:)` can't map — which otherwise differ only
 /// in the diagnostic's location.
 private func diagnoseUnsupportedParameterType(
@@ -471,7 +559,7 @@ private func diagnoseUnsupportedParameterType(
 /// array-valued argument.
 ///
 /// Shared by the `aliases` and `allowedValues`
-/// entries in `synthesizeParameterMetadata(from:in:)`, which otherwise
+/// entries in `synthesizeOperationParameters(from:in:)`, which otherwise
 /// differ only in the key, source collection, and when the argument is
 /// omitted entirely.
 private func arrayArgumentText(key: String, values: [String]) -> String {
@@ -479,8 +567,54 @@ private func arrayArgumentText(key: String, values: [String]) -> String {
     return "\(key): [\(valuesText)]"
 }
 
-/// Synthesizes one `ParamMeta(...)` source-text entry per eligible stored
-/// property of `structDecl`, in declaration order.
+/// One nested `Command` property: everything `commandFieldDeclarationText(_:)`
+/// and `payloadAssignmentText(_:)` need to declare its `@Flag`/`@Option` and
+/// fold its parsed value into `operationPayload()`'s payload.
+private struct CommandFieldSpec {
+    /// The parameter's name, shared with its `ParamMeta` entry's `name`.
+    let name: String
+
+    /// Which `ArgumentParser` property wrapper this parameter maps to.
+    let kind: CommandFieldKind
+
+    /// Whether the CLI must supply this parameter.
+    ///
+    /// Meaningful only for
+    /// `.scalarOption` (a required scalar has no default and no `?`); a
+    /// `.flag` and a `.repeatableOption` are always optional at the CLI
+    /// layer regardless of the parameter's own requiredness.
+    let required: Bool
+
+    /// Help text, shared with its `ParamMeta` entry's `description`.
+    let description: String
+
+    /// A single-character CLI short flag, if `@OperationParam(short:)`
+    /// supplied one.
+    let short: Character?
+}
+
+/// One eligible stored property's synthesized data: everything both the
+/// `parameterMetadata` table and the nested `Command` need for that
+/// property.
+///
+/// Building both from one pass over `structDecl`'s stored
+/// properties, rather than two separate traversals, keeps eligibility rules
+/// (skip computed/static, diagnose reserved names and unsupported types) and
+/// description/`@OperationParam` extraction a single code path instead of
+/// two copies that could drift — and avoids diagnosing the same invalid
+/// property twice.
+private struct OperationParameterEntry {
+    /// The synthesized `ParamMeta(...)` call-expression source text.
+    let paramMetaText: String
+
+    /// The nested `Command`'s CLI representation of this parameter, or
+    /// `nil` when the type has none `@Operation` can generate (see
+    /// `commandFieldInfo(for:)`).
+    let commandField: CommandFieldSpec?
+}
+
+/// Synthesizes one `OperationParameterEntry` per eligible stored property of
+/// `structDecl`, in declaration order.
 ///
 /// Computed properties (an accessor block present), `static` properties, and
 /// properties without a type annotation are skipped. Diagnoses (via
@@ -492,13 +626,12 @@ private func arrayArgumentText(key: String, values: [String]) -> String {
 ///     parameters.
 ///   - context: The macro expansion context used to emit diagnostics for
 ///     invalid properties.
-/// - Returns: The source text of each synthesized `ParamMeta(...)` call
-///   expression, one per eligible property.
-private func synthesizeParameterMetadata(
+/// - Returns: One entry per eligible property.
+private func synthesizeOperationParameters(
     from structDecl: StructDeclSyntax,
     in context: some MacroExpansionContext
-) -> [String] {
-    var paramMetaEntries: [String] = []
+) -> [OperationParameterEntry] {
+    var entries: [OperationParameterEntry] = []
 
     for member in structDecl.memberBlock.members {
         guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
@@ -516,7 +649,7 @@ private func synthesizeParameterMetadata(
                 continue
             }
 
-            if normalizedForReservedCheck(propertyName) == "op" {
+            if normalizedForReservedCheck(propertyName) == opFieldName {
                 context.diagnose(
                     OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
                 )
@@ -553,28 +686,167 @@ private func synthesizeParameterMetadata(
                 args.append(arrayArgumentText(key: allowedValuesLabel, values: allowedValues))
             }
 
-            paramMetaEntries.append("ParamMeta(\(args.joined(separator: ", ")))")
+            let commandField = commandFieldInfo(for: typeAnnotation).map {
+                CommandFieldSpec(
+                    name: propertyName,
+                    kind: $0.kind,
+                    required: $0.required,
+                    description: description,
+                    short: operationParam.short
+                )
+            }
+
+            entries.append(
+                OperationParameterEntry(
+                    paramMetaText: "ParamMeta(\(args.joined(separator: ", ")))",
+                    commandField: commandField
+                )
+            )
         }
     }
 
-    return paramMetaEntries
+    return entries
 }
 
-/// Formats synthesized `ParamMeta(...)` entries as the source text of a
-/// `[ParamMeta]` array literal, one entry per line.
+/// Formats synthesized `OperationParameterEntry`s' `ParamMeta(...)` text as
+/// the source text of a `[ParamMeta]` array literal, one entry per line.
 ///
-/// - Parameter entries: The `ParamMeta(...)` call-expression source text
-///   produced by `synthesizeParameterMetadata(from:in:)`.
+/// - Parameter entries: The entries produced by
+///   `synthesizeOperationParameters(from:in:)`.
 /// - Returns: `"[]"` when `entries` is empty, otherwise a multi-line array
 ///   literal with each entry indented and comma-terminated.
-private func formatParameterMetadataText(_ entries: [String]) -> String {
+private func formatParameterMetadataText(_ entries: [OperationParameterEntry]) -> String {
     guard !entries.isEmpty else { return "[]" }
-    let joined = entries.map { "    \($0)," }.joined(separator: "\n")
+    let joined = entries.map { "    \($0.paramMetaText)," }.joined(separator: "\n")
     return "[\n\(joined)\n]"
 }
 
+/// Builds the source text of one nested `Command` property: its
+/// `@Flag`/`@Option` attribute plus `var` declaration, for `field`.
+private func commandFieldDeclarationText(_ field: CommandFieldSpec) -> String {
+    let helpArgumentText = "help: \(swiftStringLiteral(field.description))"
+    let nameArgumentText =
+        field.short.map { "name: [.long, .customShort(\(swiftStringLiteral(String($0))))], " } ?? ""
+
+    switch field.kind {
+    case .flag:
+        return """
+            @Flag(\(nameArgumentText)\(helpArgumentText))
+            var \(field.name): Bool = false
+            """
+    case .scalarOption(let typeText):
+        let optionalSuffix = field.required ? "" : "?"
+        return """
+            @Option(\(nameArgumentText)\(helpArgumentText))
+            var \(field.name): \(typeText)\(optionalSuffix)
+            """
+    case .repeatableOption(let elementTypeText):
+        return """
+            @Option(\(nameArgumentText)\(helpArgumentText))
+            var \(field.name): [\(elementTypeText)] = []
+            """
+    }
+}
+
+/// Builds the source text of one `operationPayload()` statement folding
+/// `field`'s parsed value into the `payload` array of `(name, value)` pairs.
+///
+/// A `.flag` is always present (its `@Flag` default is `false`); a
+/// `.repeatableOption` is included only when non-empty; a required
+/// `.scalarOption` is always present; an optional `.scalarOption` is
+/// included only when set.
+private func payloadAssignmentText(_ field: CommandFieldSpec) -> String {
+    let key = swiftStringLiteral(field.name)
+    switch field.kind {
+    case .flag:
+        return "payload.append((\(key), \(field.name)))"
+    case .repeatableOption:
+        return """
+            if !\(field.name).isEmpty {
+                payload.append((\(key), \(field.name)))
+            }
+            """
+    case .scalarOption:
+        guard !field.required else {
+            return "payload.append((\(key), \(field.name)))"
+        }
+        return """
+            if let \(field.name) {
+                payload.append((\(key), \(field.name)))
+            }
+            """
+    }
+}
+
+/// Builds the nested `Command: AsyncParsableCommand` (ArgumentParser leaf)
+/// source text `@Operation` emits alongside `OperationDefinition`
+/// conformance, per plan.md's "Dual-use CLI".
+///
+/// One `@Flag`/`@Option` property per `fields` entry; a `CommandConfiguration`
+/// naming the command after the operation's verb; and a `run()` that prints
+/// the canonical `op` + fields payload `operationPayload()` builds from the
+/// parsed values — the identical shape `AnyOperation.run` expects and the
+/// model path sends.
+///
+/// `operationPayload()` builds that payload with
+/// `GeneratedContent(properties:uniquingKeysWith:)` directly, rather than
+/// round-tripping through `JSONSerialization` and `GeneratedContent(json:)`:
+/// it needs no `Foundation` import in the file `@Operation` is applied to
+/// (only `FoundationModels`, already required by `@Generable`/`@Guide`), and
+/// every parameter type `@Operation` supports already conforms to
+/// `ConvertibleToGeneratedContent` (`Generable` refines it; `Array` does too
+/// when its `Element` does), so no serialization step can fail.
+///
+/// - Parameters:
+///   - accessText: The access-level modifier text to prefix `Command` and
+///     its members with (e.g. `"public "`), or `""` for no explicit
+///     modifier.
+///   - structTypeName: The annotated struct's name, used to reach its
+///     `opString` static (`\(structTypeName).opString`) from inside the
+///     nested `Command`.
+///   - verbText: The source text of the `CommandConfiguration`'s
+///     `commandName` argument.
+///   - descriptionText: The source text of the `CommandConfiguration`'s
+///     `abstract` argument.
+///   - fields: The `Command` properties to declare, in declaration order.
+/// - Returns: The `Command` struct's full declaration source text.
+private func commandStructText(
+    accessText: String,
+    structTypeName: String,
+    verbText: String,
+    descriptionText: String,
+    fields: [CommandFieldSpec]
+) -> String {
+    let fieldDeclarationsText = fields.map(commandFieldDeclarationText).joined(separator: "\n\n")
+    let payloadAssignmentsText = fields.map(payloadAssignmentText).joined(separator: "\n")
+
+    return """
+        \(accessText)struct Command: AsyncParsableCommand {
+            \(accessText)static let configuration = CommandConfiguration(commandName: \(verbText), abstract: \(descriptionText))
+
+        \(fieldDeclarationsText)
+
+            \(accessText)init() {}
+
+            /// The canonical `op` + fields payload built from this command's
+            /// parsed values, in the identical shape `AnyOperation.run`
+            /// expects and the model path sends.
+            \(accessText)func operationPayload() -> GeneratedContent {
+                var payload: [(String, any ConvertibleToGeneratedContent)] = [(\(swiftStringLiteral(opFieldName)), \(structTypeName).opString)]
+        \(payloadAssignmentsText)
+                return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in new })
+            }
+
+            \(accessText)mutating func run() async throws {
+                print(operationPayload().jsonString)
+            }
+        }
+        """
+}
+
 /// Builds the source text of the `OperationDefinition` conformance's static
-/// members: `verb`, `noun`, `operationDescription`, and `parameterMetadata`.
+/// members (`verb`, `noun`, `operationDescription`, `parameterMetadata`) and
+/// the nested `Command` declaration.
 ///
 /// - Parameters:
 ///   - accessText: The access-level modifier text to prefix each member
@@ -586,20 +858,25 @@ private func formatParameterMetadataText(_ entries: [String]) -> String {
 ///   - parameterMetadataText: The source text of the `parameterMetadata`
 ///     static's `[ParamMeta]` initializer, as produced by
 ///     `formatParameterMetadataText(_:)`.
-/// - Returns: The declaration source text for all four static members,
-///   ready to splice into the generated extension's body.
+///   - commandText: The nested `Command` declaration source text, as
+///     produced by `commandStructText(accessText:structTypeName:verbText:descriptionText:fields:)`.
+/// - Returns: The declaration source text for the four static members plus
+///   `Command`, ready to splice into the generated extension's body.
 private func generateExtensionMembersText(
     accessText: String,
     verbText: String,
     nounText: String,
     descriptionText: String,
-    parameterMetadataText: String
+    parameterMetadataText: String,
+    commandText: String
 ) -> String {
     """
     \(accessText)static let verb: String = \(verbText)
     \(accessText)static let noun: String = \(nounText)
     \(accessText)static let operationDescription: String = \(descriptionText)
     \(accessText)static let parameterMetadata: [ParamMeta] = \(parameterMetadataText)
+
+    \(commandText)
     """
 }
 

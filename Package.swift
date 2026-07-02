@@ -63,6 +63,11 @@ let package = Package(
             name: "OperationsMacrosTests",
             dependencies: [
                 "OperationsMacros",
+                // `Operations` (which re-exports ArgumentParser) so
+                // CommandEmissionTests.swift can, alongside its
+                // assertMacroExpansion fixtures, apply `@Operation` for
+                // real and compile-and-parse its generated `Command`.
+                "Operations",
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),

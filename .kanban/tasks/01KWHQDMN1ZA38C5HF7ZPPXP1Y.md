@@ -19,8 +19,8 @@ comments:
   timestamp: 2026-07-02T19:50:53.937969+00:00
 depends_on:
 - 01KWHQCVGNFHVT0ZKEDAG802RR
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8380'
 title: 'Schema fusion: flat-union GenerationSchema from [AnyOperation]'
 ---
 ## What

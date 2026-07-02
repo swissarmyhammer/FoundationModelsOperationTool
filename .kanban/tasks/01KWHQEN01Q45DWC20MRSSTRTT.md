@@ -1,4 +1,9 @@
 ---
+comments:
+- actor: wballard
+  id: 01kwj8k5w78acs47y6fmvfe005
+  text: 'Heads-up from implementing ^4xgv0j0 (@Operation Command emission): the macro-generated `Command.run()` currently only does `print(operationPayload().jsonString)` — it does NOT dispatch through `AnyOperation.run` yet, because there''s no way to obtain a live `Context` instance at the macro-generated-code level (Context is an associated type resolved per concrete operation struct, and nothing in scope of the macro/Command owns a Context instance). `Command.operationPayload() -> GeneratedContent` is the stable, tested extension point (see Tests/OperationsMacrosTests/CommandEmissionTests.swift) — it returns the identical canonical payload shape `AnyOperation.run` expects (minus needing the `op` key stripped, per plan.md''s "GeneratedContent behavior with extra keys" — the `@Generable` init tolerates the extra `op` key fine, verified by `parsedCommandPayloadMatchesTheShapeAnyOperationRunDecodes`). When this task wires up the runtime registry, `run()` (or a driver-level wrapper) should call `operationPayload()` then dispatch through `AnyOperation.run(payload, context)` using whatever context-resolution mechanism this task designs.'
+  timestamp: 2026-07-02T20:33:44.839591+00:00
 depends_on:
 - 01KWHQCVGNFHVT0ZKEDAG802RR
 - 01KWHQQNZ644BZC5G1M4XGV0J0
