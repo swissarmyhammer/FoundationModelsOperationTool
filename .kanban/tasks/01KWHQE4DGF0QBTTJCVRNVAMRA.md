@@ -21,6 +21,25 @@ comments:
 
     Task left in `doing`, ready for `/review`.
   timestamp: 2026-07-02T22:50:38.404902+00:00
+- actor: wballard
+  id: 01kwjh7dysp21bazxwf179wqjd
+  text: |-
+    Addressed all 3 review findings from 2026-07-02 17:53:
+
+    1. `Sources/Operations/OperationResolver.swift` — `matchOpString`'s `input` parameter renamed to `opString` (signature, doc comment `- Parameters:` entry, and body usage `Self.spaceSeparatedTokens(opString)`).
+    2. `Sources/Operations/OperationResolver.swift` — `spaceSeparatedTokens`'s `input` parameter renamed to `text` (signature, doc comment, and body usage `text.lowercased()`).
+    3. `Sources/Operations/SchemaFusion.swift` — hoisted `OperationKeys.opFieldName`/`OperationKeys.opFieldDescription` into local `opName`/`opDescription` in `SchemaFusion.fuse`, used by both the outer `Property` and inner `DynamicGenerationSchema` constructors instead of repeating the two calls verbatim.
+
+    No caller-side changes needed for 1/2 — both parameters are already `_`-labeled (positional-only), and the only call site (`OperationTool.swift`) calls positionally.
+
+    Verification: `rm -rf .build && swift build` — clean, zero warnings, zero errors. `swift test` — 67 tests total (40 Operations/OperationsTests, 26 macros, 1 CLI placeholder), zero failures.
+
+    Task left in `doing`, ready for `/review`.
+  timestamp: 2026-07-02T23:04:37.081792+00:00
+- actor: wballard
+  id: 01kwjhe64reqqv3rd7p8pmphx1
+  text: 'Round-2 verification: clean `.build` removal + `swift build` (0 warnings) + `swift test` all green — 67/67 tests passed across 3 test bundles (OperationsTests: 40/40, OperationsMacrosTests: 26/26, OperationsCLITests: 1/1), 0 failures. Confirmed both review-finding fixes are present exactly as prescribed: `OperationResolver.swift` renames `matchOpString(_ opString:...)` and `spaceSeparatedTokens(_ text:...)` with docstrings updated; `SchemaFusion.swift` hoists `opName`/`opDescription` locals reused across both the outer `Property` and inner `DynamicGenerationSchema` constructors. No code changes were needed this round.'
+  timestamp: 2026-07-02T23:08:18.456107+00:00
 depends_on:
 - 01KWHQCVGNFHVT0ZKEDAG802RR
 - 01KWHQDMN1ZA38C5HF7ZPPXP1Y
@@ -51,3 +70,9 @@ Fixtures: use hand-conformed (no-macro) operation structs — this task does not
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-02 17:53)
+
+- [x] `Sources/Operations/OperationResolver.swift:80` — Parameter `input: String` is weakly typed and should describe its role; `input` is generic and doesn't convey that this is an operation string being matched. Rename to `opString` or `candidateOpString` to compensate for the weak type information. Rename the parameter from `input` to `opString`: `func matchOpString(_ opString: String, against candidates: [OpCandidate]) -> String?` and update the docstring and usage within the function body.
+- [x] `Sources/Operations/OperationResolver.swift:102` — Parameter `input: String` is weakly typed and should describe its role; `input` is generic and doesn't convey that this is a string being tokenized. Rename to `text`, `stringToTokenize`, or similar to compensate for the weak type information, consistent with the rule applied to other weak-type parameters. Rename the parameter from `input` to `text` or `stringToTokenize`: `private static func spaceSeparatedTokens(_ text: String) -> [String]` and update the docstring and usage within the function body.
+- [x] `Sources/Operations/SchemaFusion.swift:63` — The `op` field name and description properties are repeated verbatim across the outer Property and inner DynamicGenerationSchema constructors (lines 63-64 and 66-67). Copies can drift out of sync; extract to variables to establish a single source of truth. Extract to local variables before the Property constructor: `let opName = OperationKeys.opFieldName; let opDesc = OperationKeys.opFieldDescription`, then use these variables in both the Property and schema constructors.

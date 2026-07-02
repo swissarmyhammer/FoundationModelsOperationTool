@@ -82,16 +82,16 @@ extension OperationResolver {
         return inferOp?(content)
     }
 
-    /// Matches `input` against `candidates`, tolerant of case, `_`/`-`
+    /// Matches `opString` against `candidates`, tolerant of case, `_`/`-`
     /// separators, "noun verb" reordering, and `verbAliases`.
     ///
     /// - Parameters:
-    ///   - input: The candidate op string, e.g. from `extractedOpString`.
+    ///   - opString: The candidate op string, e.g. from `extractedOpString`.
     ///   - candidates: Every registered operation's `verb`/`noun`/`opString`.
     /// - Returns: The matching candidate's canonical `opString`, or `nil` if
     ///   none match.
-    func matchOpString(_ input: String, against candidates: [OpCandidate]) -> String? {
-        let tokens = Self.spaceSeparatedTokens(input)
+    func matchOpString(_ opString: String, against candidates: [OpCandidate]) -> String? {
+        let tokens = Self.spaceSeparatedTokens(opString)
         guard tokens.count == 2 else {
             let joined = tokens.joined(separator: " ")
             return candidates.first { Self.spaceSeparatedTokens($0.opString).joined(separator: " ") == joined }?.opString
@@ -106,12 +106,12 @@ extension OperationResolver {
         return nil
     }
 
-    /// Lowercases `input` and splits it into whitespace-separated tokens,
+    /// Lowercases `text` and splits it into whitespace-separated tokens,
     /// treating `_`/`-` as additional word separators (so `"add_note"`,
     /// `"add-note"`, and `"add note"` all tokenize to `["add", "note"]`).
-    private static func spaceSeparatedTokens(_ input: String) -> [String] {
+    private static func spaceSeparatedTokens(_ text: String) -> [String] {
         let separatorsAsSpaces = String(
-            input.lowercased().map { (character: Character) -> Character in
+            text.lowercased().map { (character: Character) -> Character in
                 character == "_" || character == "-" ? " " : character
             }
         )

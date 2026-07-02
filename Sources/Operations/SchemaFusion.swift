@@ -68,12 +68,14 @@ public enum SchemaFusion {
         name: String,
         description: String? = nil
     ) throws -> GenerationSchema {
+        let opName = OperationKeys.opFieldName
+        let opDescription = OperationKeys.opFieldDescription
         let opProperty = DynamicGenerationSchema.Property(
-            name: OperationKeys.opFieldName,
-            description: OperationKeys.opFieldDescription,
+            name: opName,
+            description: opDescription,
             schema: DynamicGenerationSchema(
-                name: OperationKeys.opFieldName,
-                description: OperationKeys.opFieldDescription,
+                name: opName,
+                description: opDescription,
                 anyOf: operations.map(\.opString)
             ),
             isOptional: false
