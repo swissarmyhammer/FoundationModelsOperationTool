@@ -28,6 +28,27 @@ comments:
 
     Ready for `/review`. Leaving in `doing`.
   timestamp: 2026-07-02T20:49:32.242157+00:00
+- actor: wballard
+  id: 01kwjawaz83x7zxym3c136xbwn
+  text: |-
+    Addressed the sole open review finding: `synthesizeOperationParameters(from:in:)` in Sources/OperationsMacros/OperationsMacros.swift exceeded the ~50-line guideline.
+
+    Fix: extracted two helpers.
+    1. `operationParameterEntry(for:identifierPattern:variable:in:)` — the per-property validation (type annotation, reserved-name check, unsupported-type diagnosis), `@Guide`/`@OperationParam` introspection, and `CommandFieldSpec`/`OperationParameterEntry` construction, returning `OperationParameterEntry?` (nil for skipped/diagnosed properties).
+    2. `paramMetaArgumentsText(propertyName:typeExprText:required:description:short:aliases:allowedValues:)` — further extracted from (1) to build the `ParamMeta(...)` argument-list text, keeping `operationParameterEntry` comfortably under 50 lines too.
+
+    `synthesizeOperationParameters` is now a ~13-line loop that calls the helper and appends non-nil results. Updated two doc comments (near `aliasesLabel` and `arrayArgumentText`) that previously pointed at `synthesizeOperationParameters(from:in:)` as the owner of the aliases/allowedValues argument-building logic to reference `paramMetaArgumentsText` instead, since that logic moved.
+
+    Verification: clean `rm -rf .build && swift build` — 0 warnings, exit 0. `swift test` — 49/49 passing (22 OperationsTests + 26 OperationsMacrosTests + 1 OperationsCLITests placeholder), 0 failures.
+
+    Ran the local `/review` engine after the change; it surfaced 3 findings, all judged out of scope / false positive and left unaddressed with justification:
+    - 2x "missing `- Throws:` doc section" — misattributed line numbers; the only `throws`-bearing declarations in the file (`OperationMacro.expansion`, a `run() async throws` inside a generated-code string template, `OperationParamMacro.expansion`) are all pre-existing and untouched by this change. Neither of my new/modified functions has `throws`.
+    - 1x duplicate `"short"` string literal (in pre-existing `applyOperationParamArgument` and in the extracted `paramMetaArgumentsText`) suggesting a named constant like `aliasesLabel`/`allowedValuesLabel`. Confirmed via diff that both occurrences predate this change (the second was moved, not created, by the extraction) — legitimate minor cleanup but outside the scope of the single checklist item this task tracks.
+
+    Adversarial double-check (via really-done's advisory gate) independently verified the decomposition is behavior-preserving, confirmed the "Throws" findings are false positives, confirmed the `"short"` literal predates this diff, and re-ran build/test independently (49/49 green). Verdict: PASS, no changes requested.
+
+    Checked off the finding in the checklist. Leaving in `doing` for `/review`.
+  timestamp: 2026-07-02T21:13:42.120594+00:00
 depends_on:
 - 01KWHQDDNXV5Q1CKH77B5ZKM1R
 position_column: doing
@@ -51,3 +72,7 @@ Extend the `@Operation` macro in `Sources/OperationsMacros/` to additionally emi
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-02 15:52)
+
+- [x] `Sources/OperationsMacros/OperationsMacros.swift:413` — synthesizeOperationParameters(from:in:) exceeds the ~50 line guideline at approximately 59 lines of actual code, making it harder to understand, test, and maintain. Extract the parameter-entry building logic (validation, guide/operationParam introspection, CommandFieldSpec construction) into a separate helper function to break the nested loop structure and reduce the function to ≤50 lines.

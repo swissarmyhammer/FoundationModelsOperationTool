@@ -331,8 +331,8 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
 /// The `@OperationParam(aliases:)` argument label.
 ///
 /// Also the `ParamMeta`
-/// initializer argument label `synthesizeOperationParameters(from:in:)` emits
-/// for it, since `@OperationParam`'s array-valued arguments round-trip
+/// initializer argument label `paramMetaArgumentsText(propertyName:typeExprText:required:description:short:aliases:allowedValues:)`
+/// emits for it, since `@OperationParam`'s array-valued arguments round-trip
 /// directly into `ParamMeta`'s same-named initializer arguments — the two
 /// must agree by design. The single source of truth for this name; every
 /// other reference in this file uses this constant instead of repeating the
@@ -559,9 +559,9 @@ private func diagnoseUnsupportedParameterType(
 /// array-valued argument.
 ///
 /// Shared by the `aliases` and `allowedValues`
-/// entries in `synthesizeOperationParameters(from:in:)`, which otherwise
-/// differ only in the key, source collection, and when the argument is
-/// omitted entirely.
+/// entries in `paramMetaArgumentsText(propertyName:typeExprText:required:description:short:aliases:allowedValues:)`,
+/// which otherwise differ only in the key, source collection, and when the
+/// argument is omitted entirely.
 private func arrayArgumentText(key: String, values: [String]) -> String {
     let valuesText = values.map(swiftStringLiteral).joined(separator: ", ")
     return "\(key): [\(valuesText)]"
@@ -642,70 +642,138 @@ private func synthesizeOperationParameters(
             guard binding.accessorBlock == nil else { continue }
             guard let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
 
-            let propertyName = identifierPattern.identifier.text
-
-            guard let typeAnnotation = binding.typeAnnotation?.type else {
-                diagnoseUnsupportedParameterType(propertyName, at: binding, in: context)
-                continue
+            if let entry = operationParameterEntry(
+                for: binding,
+                identifierPattern: identifierPattern,
+                variable: variable,
+                in: context
+            ) {
+                entries.append(entry)
             }
-
-            if normalizedForReservedCheck(propertyName) == opFieldName {
-                context.diagnose(
-                    OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
-                )
-                continue
-            }
-
-            guard let (typeExprText, required) = paramTypeInfo(for: typeAnnotation) else {
-                diagnoseUnsupportedParameterType(propertyName, at: typeAnnotation, in: context)
-                continue
-            }
-
-            let guide = guideInfo(from: variable.attributes)
-            let operationParam = operationParamInfo(from: variable.attributes)
-
-            let description = guide.description ?? docCommentDescription(from: variable.leadingTrivia) ?? ""
-            let allowedValues = operationParam.allowedValues ?? guide.allowedValues
-
-            var args = [
-                "name: \(swiftStringLiteral(propertyName))",
-                "type: \(typeExprText)",
-                "required: \(required)",
-                "description: \(swiftStringLiteral(description))",
-            ]
-            if let short = operationParam.short {
-                args.append("short: \(swiftStringLiteral(String(short)))")
-            }
-            if !operationParam.aliases.isEmpty {
-                args.append(arrayArgumentText(key: aliasesLabel, values: operationParam.aliases))
-            }
-            // Unlike `aliases`, `allowedValues` distinguishes "unset" (`nil`, no
-            // constraint) from "set to an empty closed set" (`[]`), so it's
-            // appended whenever non-nil rather than gated on non-empty.
-            if let allowedValues {
-                args.append(arrayArgumentText(key: allowedValuesLabel, values: allowedValues))
-            }
-
-            let commandField = commandFieldInfo(for: typeAnnotation).map {
-                CommandFieldSpec(
-                    name: propertyName,
-                    kind: $0.kind,
-                    required: $0.required,
-                    description: description,
-                    short: operationParam.short
-                )
-            }
-
-            entries.append(
-                OperationParameterEntry(
-                    paramMetaText: "ParamMeta(\(args.joined(separator: ", ")))",
-                    commandField: commandField
-                )
-            )
         }
     }
 
     return entries
+}
+
+/// Builds the `OperationParameterEntry` for one candidate stored-property
+/// binding, or `nil` (after diagnosing via `context`) when the property has
+/// no type annotation, uses the reserved `"op"` name, or has a type
+/// `@Operation` can't map to a `ParamType`.
+///
+/// - Parameters:
+///   - binding: The candidate property's pattern binding. Callers have
+///     already confirmed it's non-computed (no accessor block) and its
+///     pattern is an identifier pattern.
+///   - identifierPattern: `binding.pattern` as an `IdentifierPatternSyntax`,
+///     supplying the property name.
+///   - variable: The enclosing `VariableDeclSyntax`, supplying attributes
+///     (`@Guide`, `@OperationParam`) and leading trivia (doc comments).
+///   - context: The macro expansion context used to emit diagnostics for
+///     invalid properties.
+/// - Returns: The synthesized entry, or `nil` if the property was skipped.
+private func operationParameterEntry(
+    for binding: PatternBindingSyntax,
+    identifierPattern: IdentifierPatternSyntax,
+    variable: VariableDeclSyntax,
+    in context: some MacroExpansionContext
+) -> OperationParameterEntry? {
+    let propertyName = identifierPattern.identifier.text
+
+    guard let typeAnnotation = binding.typeAnnotation?.type else {
+        diagnoseUnsupportedParameterType(propertyName, at: binding, in: context)
+        return nil
+    }
+
+    if normalizedForReservedCheck(propertyName) == opFieldName {
+        context.diagnose(
+            OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
+        )
+        return nil
+    }
+
+    guard let (typeExprText, required) = paramTypeInfo(for: typeAnnotation) else {
+        diagnoseUnsupportedParameterType(propertyName, at: typeAnnotation, in: context)
+        return nil
+    }
+
+    let guide = guideInfo(from: variable.attributes)
+    let operationParam = operationParamInfo(from: variable.attributes)
+
+    let description = guide.description ?? docCommentDescription(from: variable.leadingTrivia) ?? ""
+    let allowedValues = operationParam.allowedValues ?? guide.allowedValues
+
+    let args = paramMetaArgumentsText(
+        propertyName: propertyName,
+        typeExprText: typeExprText,
+        required: required,
+        description: description,
+        short: operationParam.short,
+        aliases: operationParam.aliases,
+        allowedValues: allowedValues
+    )
+
+    let commandField = commandFieldInfo(for: typeAnnotation).map {
+        CommandFieldSpec(
+            name: propertyName,
+            kind: $0.kind,
+            required: $0.required,
+            description: description,
+            short: operationParam.short
+        )
+    }
+
+    return OperationParameterEntry(
+        paramMetaText: "ParamMeta(\(args.joined(separator: ", ")))",
+        commandField: commandField
+    )
+}
+
+/// Builds the `ParamMeta(...)` call-expression argument list for one
+/// parameter, in initializer-argument order.
+///
+/// - Parameters:
+///   - propertyName: The parameter's `name` argument value.
+///   - typeExprText: The `type` argument's source text, as produced by
+///     `paramTypeInfo(for:)`.
+///   - required: The `required` argument value.
+///   - description: The `description` argument value.
+///   - short: The `@OperationParam(short:)` value, if supplied; appended as
+///     `short:` when non-`nil`.
+///   - aliases: The `@OperationParam(aliases:)` values; appended as
+///     `aliases:` when non-empty.
+///   - allowedValues: The resolved allowed-values constraint (from
+///     `@OperationParam(allowedValues:)` or `@Guide`'s `.anyOf`), if any.
+///     Unlike `aliases`, this distinguishes "unset" (`nil`, no constraint)
+///     from "set to an empty closed set" (`[]`), so it's appended whenever
+///     non-`nil` rather than gated on non-empty.
+/// - Returns: The `ParamMeta(...)` initializer's argument-expression source
+///   texts, in order.
+private func paramMetaArgumentsText(
+    propertyName: String,
+    typeExprText: String,
+    required: Bool,
+    description: String,
+    short: Character?,
+    aliases: [String],
+    allowedValues: [String]?
+) -> [String] {
+    var args = [
+        "name: \(swiftStringLiteral(propertyName))",
+        "type: \(typeExprText)",
+        "required: \(required)",
+        "description: \(swiftStringLiteral(description))",
+    ]
+    if let short {
+        args.append("short: \(swiftStringLiteral(String(short)))")
+    }
+    if !aliases.isEmpty {
+        args.append(arrayArgumentText(key: aliasesLabel, values: aliases))
+    }
+    if let allowedValues {
+        args.append(arrayArgumentText(key: allowedValuesLabel, values: allowedValues))
+    }
+    return args
 }
 
 /// Formats synthesized `OperationParameterEntry`s' `ParamMeta(...)` text as
