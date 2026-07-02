@@ -389,6 +389,12 @@ public struct OperationMacro: ExtensionMacro {
     /// - Returns: A single-element array containing the synthesized
     ///   `OperationDefinition` conformance extension, or an empty array if
     ///   `declaration` isn't a struct or `node` carries no argument list.
+    /// - Throws: Rethrows from `ExtensionDeclSyntax`'s string-interpolation
+    ///   initializer if the assembled extension source text fails to parse
+    ///   into valid syntax — an internal invariant violation of this
+    ///   function's own code generation, not an outcome triggerable by
+    ///   `@Operation` usage; invalid attribute arguments are diagnosed
+    ///   instead of thrown.
     public static func expansion(
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -843,6 +849,10 @@ public struct OperationParamMacro: PeerMacro {
     ///     never diagnoses).
     /// - Returns: An empty array; this macro never produces peer
     ///   declarations.
+    /// - Throws: Never. `throws` is a `PeerMacro` protocol requirement, not
+    ///   a capability this expansion exercises: it does no diagnosing and no
+    ///   syntax construction that could fail, and unconditionally returns an
+    ///   empty array.
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
