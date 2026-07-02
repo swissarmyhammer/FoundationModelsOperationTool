@@ -61,7 +61,13 @@ let package = Package(
         ),
         .testTarget(
             name: "OperationsMacrosTests",
-            dependencies: ["OperationsMacros"]
+            dependencies: [
+                "OperationsMacros",
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
+            ]
         ),
         .testTarget(
             name: "OperationsCLITests",
