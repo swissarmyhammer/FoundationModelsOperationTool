@@ -422,15 +422,6 @@ private func arrayArgumentText(key: String, values: [String]) -> String {
     return "\(key): [\(valuesText)]"
 }
 
-/// Appends a `"\(key): [...]"` argument to `args` when `values` is
-/// non-empty, omitting it otherwise. Used for `aliases`, which has no
-/// nil/empty distinction to preserve — an unset `aliases` is represented as
-/// `[]`, so an empty collection and an absent one are the same thing.
-private func appendArrayArgument(to args: inout [String], key: String, values: [String]) {
-    guard !values.isEmpty else { return }
-    args.append(arrayArgumentText(key: key, values: values))
-}
-
 /// Synthesizes one `ParamMeta(...)` source-text entry per eligible stored
 /// property of `structDecl`, in declaration order.
 ///
@@ -495,7 +486,9 @@ private func synthesizeParameterMetadata(
             if let short = operationParam.short {
                 args.append("short: \(swiftStringLiteral(String(short)))")
             }
-            appendArrayArgument(to: &args, key: "aliases", values: operationParam.aliases)
+            if !operationParam.aliases.isEmpty {
+                args.append(arrayArgumentText(key: "aliases", values: operationParam.aliases))
+            }
             // Unlike `aliases`, `allowedValues` distinguishes "unset" (`nil`, no
             // constraint) from "set to an empty closed set" (`[]`), so it's
             // appended whenever non-nil rather than gated on non-empty.
