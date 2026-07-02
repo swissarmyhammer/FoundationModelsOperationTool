@@ -4,9 +4,16 @@
 /// about, so `ParamMeta` can describe both the model-facing schema and the
 /// CLI-facing argument without inventing a parallel type vocabulary.
 public enum ParamType: Sendable, Equatable {
+    /// A string primitive type.
     case string
+
+    /// An integer primitive type.
     case integer
+
+    /// A floating-point number primitive type.
     case number
+
+    /// A Boolean primitive type.
     case boolean
 
     /// A repeatable value of the given element type (a Swift `Array`).
@@ -44,6 +51,7 @@ public struct ParamMeta: Sendable, Equatable {
     /// constrained; `nil` when any value of `type` is allowed.
     public let allowedValues: [String]?
 
+    /// Creates a parameter metadata descriptor with the given values.
     public init(
         name: String,
         type: ParamType,

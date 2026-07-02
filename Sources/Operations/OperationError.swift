@@ -18,6 +18,11 @@ public enum OperationError: Error, Sendable, Equatable {
     /// representation (e.g. `OperationDefinition.init(_:)` threw).
     case decodingFailed
 
+    /// The operation's `Output` could not be JSON-encoded, or the resulting
+    /// JSON bytes were not valid UTF-8 (e.g. `JSONEncoder.encode` threw, or
+    /// `String(data:encoding:)` returned `nil`).
+    case encodingFailed
+
     /// The operation's `execute(in:)` threw.
     case executionFailed
 }

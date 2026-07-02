@@ -20,6 +20,45 @@ private struct FixtureOutput: Encodable, Sendable, Equatable {
 /// Error thrown by `FixtureOperation.execute(in:)` when `FixtureContext.shouldFail` is set.
 private struct FixtureExecutionError: Error {}
 
+/// Error thrown by `FailingEncodeOutput.encode(to:)`, always.
+private struct FixtureEncodingError: Error {}
+
+/// `Encodable` conformance that always throws, to exercise `AnyOperation.run`'s
+/// output-encoding failure path.
+private struct FailingEncodeOutput: Encodable, Sendable {
+    func encode(to encoder: Encoder) throws {
+        throw FixtureEncodingError()
+    }
+}
+
+/// A hand-conformed `OperationDefinition` whose `Output` always fails to
+/// JSON-encode, proving `AnyOperation.run` surfaces
+/// `OperationError.encodingFailed` (not `.decodingFailed`) for that failure
+/// mode.
+private struct FailingEncodeOperation: OperationDefinition {
+    typealias Context = FixtureContext
+    typealias Output = FailingEncodeOutput
+
+    static let verb = "boom"
+    static let noun = "encode"
+    static let operationDescription = "Always fails to JSON-encode its output"
+    static let parameterMetadata: [ParamMeta] = []
+
+    static var generationSchema: GenerationSchema {
+        GenerationSchema(type: FailingEncodeOperation.self, description: operationDescription, properties: [])
+    }
+
+    init(_ content: GeneratedContent) throws {}
+
+    var generatedContent: GeneratedContent {
+        GeneratedContent(properties: [:])
+    }
+
+    func execute(in context: FixtureContext) async throws -> FailingEncodeOutput {
+        FailingEncodeOutput()
+    }
+}
+
 /// A hand-conformed `OperationDefinition` — no `@Operation`/`@Generable` macro
 /// involved — proving the manual escape hatch plan.md calls out: conforming
 /// directly to `OperationDefinition` (and, in turn, `Generable`) is always
@@ -149,6 +188,21 @@ private struct FixtureOperation: OperationDefinition {
             Issue.record("expected OperationError.decodingFailed to be thrown")
         } catch let error as OperationError {
             #expect(error == .decodingFailed)
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+    }
+
+    @Test func anyOperationRunOutputEncodingFailureSurfacesOperationErrorEncodingFailed() async throws {
+        let anyOp = AnyOperation(FailingEncodeOperation.self)
+        let content = GeneratedContent(properties: [:])
+        let context = FixtureContext(shouldFail: false)
+
+        do {
+            _ = try await anyOp.run(content, context)
+            Issue.record("expected OperationError.encodingFailed to be thrown")
+        } catch let error as OperationError {
+            #expect(error == .encodingFailed)
         } catch {
             Issue.record("unexpected error type: \(error)")
         }

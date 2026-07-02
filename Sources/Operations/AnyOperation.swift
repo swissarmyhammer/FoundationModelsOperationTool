@@ -27,9 +27,10 @@ public struct AnyOperation<Context: Sendable>: Sendable {
     /// against `context`, and returns the JSON-encoded result.
     ///
     /// Throws `OperationError.decodingFailed` if the concrete operation's
-    /// `init(_:)` throws, if JSON-encoding its `Output` throws, or if the
-    /// encoded JSON isn't valid UTF-8; throws `OperationError.executionFailed`
-    /// if `execute(in:)` throws.
+    /// `init(_:)` throws; throws `OperationError.executionFailed` if
+    /// `execute(in:)` throws; throws `OperationError.encodingFailed` if
+    /// JSON-encoding its `Output` throws, or if the encoded JSON isn't valid
+    /// UTF-8.
     let run: @Sendable (GeneratedContent, Context) async throws -> String
 
     /// Erases `O` into an `AnyOperation` sharing `O`'s `Context`.
@@ -59,11 +60,11 @@ public struct AnyOperation<Context: Sendable>: Sendable {
             do {
                 data = try encoder.encode(output)
             } catch {
-                throw OperationError.decodingFailed
+                throw OperationError.encodingFailed
             }
 
             guard let json = String(data: data, encoding: .utf8) else {
-                throw OperationError.decodingFailed
+                throw OperationError.encodingFailed
             }
             return json
         }
