@@ -8,10 +8,10 @@
 /// and separators" means, so the two call sites can't drift apart.
 internal enum OperationKeys {
     /// The fused schema's discriminator property name.
-    static let opFieldName = "op"
+    internal static let opFieldName = "op"
 
     /// The fused schema's discriminator property description.
-    static let opFieldDescription = "The operation to perform, as \"verb noun\"."
+    internal static let opFieldDescription = "The operation to perform, as \"verb noun\"."
 
     /// Normalizes `name` for case/separator-insensitive comparison:
     /// lowercased with `_`/`-` separators removed, so `"Op"`, `"_op"`,

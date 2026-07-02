@@ -131,15 +131,15 @@ public enum SchemaFusion {
 private struct FirstSeenField {
     /// The index, in `operations` order, of the first operation to declare
     /// this parameter name.
-    let opIndex: Int
+    fileprivate let opIndex: Int
 
     /// The metadata the first-declaring operation gave this parameter.
-    let meta: ParamMeta
+    fileprivate let meta: ParamMeta
 
     /// The fused schema's deterministic field order: by `opIndex`, then
     /// alphabetically by `meta.name` among fields first declared by the
     /// same operation.
-    static func orderedBeforeInFusedSchema(_ lhs: FirstSeenField, _ rhs: FirstSeenField) -> Bool {
+    fileprivate static func orderedBeforeInFusedSchema(_ lhs: FirstSeenField, _ rhs: FirstSeenField) -> Bool {
         if lhs.opIndex != rhs.opIndex {
             return lhs.opIndex < rhs.opIndex
         }

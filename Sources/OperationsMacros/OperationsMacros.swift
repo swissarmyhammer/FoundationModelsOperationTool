@@ -8,7 +8,7 @@ import SwiftSyntaxMacros
 // MARK: - Diagnostics
 
 /// Diagnostic messages emitted while expanding `@Operation`.
-enum OperationMacroDiagnostic: DiagnosticMessage {
+internal enum OperationMacroDiagnostic: DiagnosticMessage {
     /// `@Operation` was attached to a declaration that isn't a struct.
     case requiresStruct
 
@@ -26,7 +26,7 @@ enum OperationMacroDiagnostic: DiagnosticMessage {
     /// `ParamType`.
     case unsupportedParameterType(String)
 
-    var message: String {
+    internal var message: String {
         switch self {
         case .requiresStruct:
             return "'@Operation' can only be applied to a struct"
@@ -43,15 +43,15 @@ enum OperationMacroDiagnostic: DiagnosticMessage {
         }
     }
 
-    var diagnosticID: MessageID {
+    internal var diagnosticID: MessageID {
         MessageID(domain: "OperationsMacros", id: "Operation.\(self)")
     }
 
-    var severity: DiagnosticSeverity { .error }
+    internal var severity: DiagnosticSeverity { .error }
 }
 
 extension OperationMacroDiagnostic {
-    func diagnose(at node: some SyntaxProtocol) -> Diagnostic {
+    internal func diagnose(at node: some SyntaxProtocol) -> Diagnostic {
         Diagnostic(node: Syntax(node), message: self)
     }
 }
@@ -542,10 +542,10 @@ private func arrayArgumentText(key: String, values: [String]) -> String {
 /// fold its parsed value into `operationPayload()`'s payload.
 private struct CommandFieldSpec {
     /// The parameter's name, shared with its `ParamMeta` entry's `name`.
-    let name: String
+    fileprivate let name: String
 
     /// Which `ArgumentParser` property wrapper this parameter maps to.
-    let kind: CommandFieldKind
+    fileprivate let kind: CommandFieldKind
 
     /// Whether the CLI must supply this parameter.
     ///
@@ -553,14 +553,14 @@ private struct CommandFieldSpec {
     /// `.scalarOption` (a required scalar has no default and no `?`); a
     /// `.flag` and a `.repeatableOption` are always optional at the CLI
     /// layer regardless of the parameter's own requiredness.
-    let required: Bool
+    fileprivate let required: Bool
 
     /// Help text, shared with its `ParamMeta` entry's `description`.
-    let description: String
+    fileprivate let description: String
 
     /// A single-character CLI short flag, if `@OperationParam(short:)`
     /// supplied one.
-    let short: Character?
+    fileprivate let short: Character?
 }
 
 /// One eligible stored property's synthesized data: everything both the
@@ -575,7 +575,7 @@ private struct CommandFieldSpec {
 /// property twice.
 private struct OperationParameterEntry {
     /// The synthesized `ParamMeta(...)` call-expression source text.
-    let paramMetaText: String
+    fileprivate let paramMetaText: String
 
     /// The nested `Command`'s CLI representation of this parameter, or
     /// `nil` when the type has no CLI representation `@Operation` can
@@ -583,7 +583,7 @@ private struct OperationParameterEntry {
     /// of, the types `primitiveParamTypeExprText(_:)` accepts for
     /// `ParamMeta`, so such a property still gets a `ParamMeta` entry but no
     /// `Command` field (see `commandFieldKind(for:)`).
-    let commandField: CommandFieldSpec?
+    fileprivate let commandField: CommandFieldSpec?
 }
 
 /// Synthesizes one `OperationParameterEntry` per eligible stored property of
@@ -864,8 +864,8 @@ public struct OperationParamMacro: PeerMacro {
 
 /// Registers every macro implemented by this plugin with the compiler.
 @main
-struct OperationsMacrosPlugin: CompilerPlugin {
-    let providingMacros: [Macro.Type] = [
+internal struct OperationsMacrosPlugin: CompilerPlugin {
+    internal let providingMacros: [Macro.Type] = [
         OperationMacro.self,
         OperationParamMacro.self,
     ]

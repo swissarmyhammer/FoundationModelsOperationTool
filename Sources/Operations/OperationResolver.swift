@@ -62,9 +62,9 @@ extension OperationResolver {
     /// its `verb`/`noun` pair to match against (independent of `Context`,
     /// unlike `AnyOperation`) and the canonical `opString` to return.
     internal struct OpCandidate {
-        let verb: String
-        let noun: String
-        let opString: String
+        internal let verb: String
+        internal let noun: String
+        internal let opString: String
     }
 
     /// Extracts a candidate op string from `content`: the explicit `op`
@@ -128,11 +128,11 @@ extension OperationResolver {
         /// key, which also sidesteps whether the target operation's
         /// `Generable` initializer tolerates extra keys (see plan.md's
         /// "`GeneratedContent` behavior with extra keys").
-        let content: GeneratedContent
+        internal let content: GeneratedContent
 
         /// The canonical names of every required parameter this resolution
         /// could not find a value for.
-        let missingRequired: [String]
+        internal let missingRequired: [String]
     }
 
     /// Resolves `content`'s properties against `parameters`' canonical

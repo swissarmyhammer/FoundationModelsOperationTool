@@ -41,7 +41,7 @@ public struct AnyOperation<Context: Sendable>: Sendable {
     /// `execute(in:)` throws; throws `OperationError.encodingFailed` if
     /// JSON-encoding its `Output` throws, or if the encoded JSON isn't valid
     /// UTF-8.
-    let run: @Sendable (GeneratedContent, Context) async throws -> String
+    internal let run: @Sendable (GeneratedContent, Context) async throws -> String
 
     /// Erases `O` into an `AnyOperation` sharing `O`'s `Context`.
     public init<O: OperationDefinition>(_ type: O.Type) where O.Context == Context {
