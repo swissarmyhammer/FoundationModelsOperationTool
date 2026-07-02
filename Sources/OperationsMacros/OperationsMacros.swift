@@ -103,6 +103,11 @@ private func swiftStringLiteral(_ value: String) -> String {
     return "\"\(escaped)\""
 }
 
+/// Source text of an empty Swift string literal, used as the default `verb`,
+/// `noun`, and `description` text when the corresponding `@Operation(...)`
+/// argument is absent.
+private let emptyStringLiteralText = "\"\""
+
 /// Normalizes a parameter name for the reserved-`"op"`-name check: lowercased
 /// with `_`/`-` separators removed, so `"Op"`, `"_op"`, and `"o-p"` are all
 /// caught alongside a literal `"op"`.
@@ -231,33 +236,37 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
     return values
 }
 
+/// Labels of `@OperationParam(...)` arguments whose value is a string-array
+/// literal, keyed by label text. Driving `operationParamInfo(from:)`'s loop
+/// from this table — rather than one hand-written `case` branch per label —
+/// keeps `aliases` and `allowedValues` a single code path instead of two
+/// copies that differ only by name.
+private let operationParamArrayArgumentLabels = ["aliases", "allowedValues"]
+
 /// CLI affordances recognized from a property's `@OperationParam(...)`
 /// attribute.
 private func operationParamInfo(
     from attributes: AttributeListSyntax
 ) -> (short: Character?, aliases: [String], allowedValues: [String]?) {
     var short: Character?
-    var aliases: [String] = []
-    var allowedValues: [String]?
+    var arrayArguments: [String: [String]] = [:]
 
     for arguments in argumentLists(forAttributeNamed: "OperationParam", in: attributes) {
         for argument in arguments {
-            switch argument.label?.text {
-            case "short":
+            guard let label = argument.label?.text else { continue }
+            if label == "short" {
                 if let literal = argument.expression.plainStringLiteralValue, let first = literal.first {
                     short = first
                 }
-            case "aliases":
-                aliases = extractStringArrayLiterals(from: argument.expression) ?? aliases
-            case "allowedValues":
-                allowedValues = extractStringArrayLiterals(from: argument.expression) ?? allowedValues
-            default:
-                break
+            } else if operationParamArrayArgumentLabels.contains(label),
+                let values = extractStringArrayLiterals(from: argument.expression)
+            {
+                arrayArguments[label] = values
             }
         }
     }
 
-    return (short, aliases, allowedValues)
+    return (short, arrayArguments["aliases"] ?? [], arrayArguments["allowedValues"])
 }
 
 // MARK: - `@Operation`
@@ -335,6 +344,29 @@ public struct OperationMacro: ExtensionMacro {
     }
 }
 
+/// Diagnoses `expr` (via `context`) against `diagnostic`'s non-empty-string
+/// requirement when it is absent or an empty string literal. Shared by the
+/// `verb` and `noun` checks in `verbNounDescriptionText(from:node:in:)`,
+/// which otherwise differ only in the expression and diagnostic case.
+///
+/// - Parameters:
+///   - expr: The argument expression to validate, or `nil` if the argument
+///     was omitted entirely.
+///   - diagnostic: The diagnostic to emit when validation fails.
+///   - node: The attribute syntax, used as the diagnostic location when
+///     `expr` is `nil` (so there's no argument expression to point at).
+///   - context: The macro expansion context used to emit the diagnostic.
+private func validateNonEmptyStringArgument(
+    expr: ExprSyntax?,
+    diagnostic: OperationMacroDiagnostic,
+    node: AttributeSyntax,
+    in context: some MacroExpansionContext
+) {
+    if expr?.plainStringLiteralValue?.isEmpty ?? (expr == nil) {
+        context.diagnose(diagnostic.diagnose(at: expr.map(Syntax.init) ?? Syntax(node)))
+    }
+}
+
 /// Derives the source text of `verb`, `noun`, and `description` from an
 /// `@Operation(...)` attribute's argument list, diagnosing (via `context`)
 /// when `verb` or `noun` is missing entirely or is an empty string literal.
@@ -346,7 +378,8 @@ public struct OperationMacro: ExtensionMacro {
 ///     to point the diagnostic at).
 ///   - context: The macro expansion context used to emit diagnostics.
 /// - Returns: The source text of the `verb`, `noun`, and `description`
-///   argument expressions, each defaulting to `"\"\""` when absent.
+///   argument expressions, each defaulting to `emptyStringLiteralText` when
+///   absent.
 private func verbNounDescriptionText(
     from arguments: LabeledExprListSyntax,
     node: AttributeSyntax,
@@ -356,22 +389,46 @@ private func verbNounDescriptionText(
     let nounExpr = arguments.first(labeled: "noun")?.expression
     let descriptionExpr = arguments.first(labeled: "description")?.expression
 
-    if verbExpr?.plainStringLiteralValue?.isEmpty ?? (verbExpr == nil) {
-        context.diagnose(
-            OperationMacroDiagnostic.verbMustNotBeEmpty.diagnose(at: verbExpr.map(Syntax.init) ?? Syntax(node))
-        )
-    }
-    if nounExpr?.plainStringLiteralValue?.isEmpty ?? (nounExpr == nil) {
-        context.diagnose(
-            OperationMacroDiagnostic.nounMustNotBeEmpty.diagnose(at: nounExpr.map(Syntax.init) ?? Syntax(node))
-        )
-    }
+    validateNonEmptyStringArgument(expr: verbExpr, diagnostic: .verbMustNotBeEmpty, node: node, in: context)
+    validateNonEmptyStringArgument(expr: nounExpr, diagnostic: .nounMustNotBeEmpty, node: node, in: context)
 
-    let verbText = verbExpr?.trimmedDescription ?? "\"\""
-    let nounText = nounExpr?.trimmedDescription ?? "\"\""
-    let descriptionText = descriptionExpr?.trimmedDescription ?? "\"\""
+    let verbText = verbExpr?.trimmedDescription ?? emptyStringLiteralText
+    let nounText = nounExpr?.trimmedDescription ?? emptyStringLiteralText
+    let descriptionText = descriptionExpr?.trimmedDescription ?? emptyStringLiteralText
 
     return (verbText, nounText, descriptionText)
+}
+
+/// Diagnoses `propertyName` (via `context`) as having an unsupported
+/// parameter type at `location`. Shared by both unsupported-type call sites
+/// in `synthesizeParameterMetadata(from:in:)` — a missing type annotation
+/// and a type `paramTypeInfo(for:)` can't map — which otherwise differ only
+/// in the diagnostic's location.
+private func diagnoseUnsupportedParameterType(
+    _ propertyName: String,
+    at location: some SyntaxProtocol,
+    in context: some MacroExpansionContext
+) {
+    context.diagnose(OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: location))
+}
+
+/// Formats `"\(key): [...]"` as the source text of a `ParamMeta(...)`
+/// array-valued argument. Shared by the `aliases` and `allowedValues`
+/// entries in `synthesizeParameterMetadata(from:in:)`, which otherwise
+/// differ only in the key, source collection, and when the argument is
+/// omitted entirely.
+private func arrayArgumentText(key: String, values: [String]) -> String {
+    let valuesText = values.map(swiftStringLiteral).joined(separator: ", ")
+    return "\(key): [\(valuesText)]"
+}
+
+/// Appends a `"\(key): [...]"` argument to `args` when `values` is
+/// non-empty, omitting it otherwise. Used for `aliases`, which has no
+/// nil/empty distinction to preserve — an unset `aliases` is represented as
+/// `[]`, so an empty collection and an absent one are the same thing.
+private func appendArrayArgument(to args: inout [String], key: String, values: [String]) {
+    guard !values.isEmpty else { return }
+    args.append(arrayArgumentText(key: key, values: values))
 }
 
 /// Synthesizes one `ParamMeta(...)` source-text entry per eligible stored
@@ -407,9 +464,7 @@ private func synthesizeParameterMetadata(
             let propertyName = identifierPattern.identifier.text
 
             guard let typeAnnotation = binding.typeAnnotation?.type else {
-                context.diagnose(
-                    OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: binding)
-                )
+                diagnoseUnsupportedParameterType(propertyName, at: binding, in: context)
                 continue
             }
 
@@ -421,9 +476,7 @@ private func synthesizeParameterMetadata(
             }
 
             guard let (typeExprText, required) = paramTypeInfo(for: typeAnnotation) else {
-                context.diagnose(
-                    OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: typeAnnotation)
-                )
+                diagnoseUnsupportedParameterType(propertyName, at: typeAnnotation, in: context)
                 continue
             }
 
@@ -442,13 +495,12 @@ private func synthesizeParameterMetadata(
             if let short = operationParam.short {
                 args.append("short: \(swiftStringLiteral(String(short)))")
             }
-            if !operationParam.aliases.isEmpty {
-                let aliasesText = operationParam.aliases.map(swiftStringLiteral).joined(separator: ", ")
-                args.append("aliases: [\(aliasesText)]")
-            }
+            appendArrayArgument(to: &args, key: "aliases", values: operationParam.aliases)
+            // Unlike `aliases`, `allowedValues` distinguishes "unset" (`nil`, no
+            // constraint) from "set to an empty closed set" (`[]`), so it's
+            // appended whenever non-nil rather than gated on non-empty.
             if let allowedValues {
-                let allowedValuesText = allowedValues.map(swiftStringLiteral).joined(separator: ", ")
-                args.append("allowedValues: [\(allowedValuesText)]")
+                args.append(arrayArgumentText(key: "allowedValues", values: allowedValues))
             }
 
             paramMetaEntries.append("ParamMeta(\(args.joined(separator: ", ")))")

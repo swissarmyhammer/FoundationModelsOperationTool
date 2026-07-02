@@ -226,6 +226,42 @@ private let operationMacroSpecs: [String: MacroSpec] = [
         )
     }
 
+    // MARK: - `@OperationParam` explicit empty `allowedValues`
+
+    /// An explicit `allowedValues: []` is a closed set with zero members —
+    /// distinct from omitting `allowedValues` entirely (which leaves the
+    /// constraint unset). The generated `ParamMeta(...)` call must preserve
+    /// that distinction by still emitting `allowedValues: []`.
+    @Test func explicitEmptyAllowedValuesIsPreservedRatherThanOmitted() {
+        assertMacroExpansion(
+            """
+            @Operation(verb: "add", noun: "note", description: "Create a new note")
+            struct AddNote {
+                @Guide(description: "The note priority")
+                @OperationParam(allowedValues: [])
+                var priority: String
+            }
+            """,
+            expandedSource: """
+                struct AddNote {
+                    @Guide(description: "The note priority")
+                    @OperationParam(allowedValues: [])
+                    var priority: String
+                }
+
+                extension AddNote: OperationDefinition {
+                    static let verb: String = "add"
+                    static let noun: String = "note"
+                    static let operationDescription: String = "Create a new note"
+                    static let parameterMetadata: [ParamMeta] = [
+                        ParamMeta(name: "priority", type: .string, required: true, description: "The note priority", allowedValues: []),
+                    ]
+                }
+                """,
+            macroSpecs: operationMacroSpecs
+        )
+    }
+
     // MARK: - Doc-comment-trivia description fallback
 
     @Test func docCommentTriviaSuppliesDescriptionWhenNoGuideIsPresent() {
