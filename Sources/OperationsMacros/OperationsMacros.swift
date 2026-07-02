@@ -39,7 +39,7 @@ enum OperationMacroDiagnostic: DiagnosticMessage {
                 "parameter '\(name)' is reserved: it normalizes to 'op', which collides with the fused-tool discriminator field"
         case .unsupportedParameterType(let name):
             return
-                "parameter '\(name)' has an unsupported type; '@Operation' supports String, Int, Double, Bool, Array of those, and Optional wrapping any of those"
+                "parameter '\(name)' has an unsupported type; '@Operation' supports String, Int, Double, Float, Bool, Array of those, and Optional wrapping any of those"
         }
     }
 

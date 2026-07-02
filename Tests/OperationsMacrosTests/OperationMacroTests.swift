@@ -347,7 +347,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
             diagnostics: [
                 DiagnosticSpec(
                     message:
-                        "parameter 'createdAt' has an unsupported type; '@Operation' supports String, Int, Double, Bool, Array of those, and Optional wrapping any of those",
+                        "parameter 'createdAt' has an unsupported type; '@Operation' supports String, Int, Double, Float, Bool, Array of those, and Optional wrapping any of those",
                     line: 3,
                     column: 20
                 )
