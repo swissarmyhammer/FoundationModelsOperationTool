@@ -30,7 +30,7 @@ comments:
 
     Checked off both review finding items. Leaving task in doing for review.
   timestamp: 2026-07-02T16:21:05.608383+00:00
-position_column: doing
+position_column: done
 position_ordinal: '80'
 title: 'Package scaffolding: Package.swift, targets, test skeletons'
 ---
