@@ -120,13 +120,6 @@ private let emptyStringLiteralText = "\"\""
 /// compiler-plugin target cannot depend on.
 private let opFieldName = "op"
 
-/// Normalizes a parameter name for the reserved-`opFieldName`-name check:
-/// lowercased with `_`/`-` separators removed, so `"Op"`, `"_op"`, and
-/// `"o-p"` are all caught alongside a literal `"op"`.
-private func normalizedForReservedCheck(_ name: String) -> String {
-    name.lowercased().filter { $0 != "_" && $0 != "-" }
-}
-
 /// Extracts a joined description from a stored property's `///` doc-comment
 /// trivia, or `nil` if it carries none.
 private func docCommentDescription(from trivia: Trivia) -> String? {
@@ -175,26 +168,15 @@ private func primitiveParamTypeExprText(_ type: TypeSyntax) -> String? {
 /// Unwraps a single level of `Optional` (`T?`) from `type`, deriving
 /// `required` (`Optional` ⇒ `false`).
 ///
-/// Shared by `paramTypeInfo(for:)` and `commandFieldInfo(for:)`, which both
-/// need this same unwrap-and-derive-`required` step before mapping the
-/// wrapped type to their own vocabulary (a `ParamType` source-text
-/// expression, and a `CommandFieldKind`, respectively).
+/// Shared by `operationParameterEntry(for:identifierPattern:variable:in:)`,
+/// which unwraps a property's type once and reuses the result to derive both
+/// its `ParamType` source text (via `primitiveParamTypeExprText(_:)`) and its
+/// `CommandFieldKind` (via `commandFieldKind(for:)`).
 private func unwrappingOptional(_ type: TypeSyntax) -> (wrapped: TypeSyntax, required: Bool) {
     if let optionalType = type.as(OptionalTypeSyntax.self) {
         return (optionalType.wrappedType, false)
     }
     return (type, true)
-}
-
-/// Maps a field type to `(ParamType source text, required)`, unwrapping a
-/// single level of `Optional` (`T?`) to derive `required`.
-///
-/// Returns `nil` for
-/// unsupported types.
-private func paramTypeInfo(for type: TypeSyntax) -> (typeExprText: String, required: Bool)? {
-    let (wrapped, required) = unwrappingOptional(type)
-    guard let text = primitiveParamTypeExprText(wrapped) else { return nil }
-    return (text, required)
 }
 
 // MARK: - Command field mapping
@@ -240,19 +222,6 @@ private func commandFieldKind(for type: TypeSyntax) -> CommandFieldKind? {
     return identifierType.name.text == "Bool" ? .flag : .scalarOption(typeText: identifierType.name.text)
 }
 
-/// Maps a field type to `(CommandFieldKind, required)`, unwrapping a single
-/// level of `Optional` (`T?`) to derive `required`.
-///
-/// Returns `nil` when the type has no CLI representation `@Operation` can
-/// generate (e.g. a nested array) — distinct from, and a strict subset of,
-/// the types `paramTypeInfo(for:)` accepts for `ParamMeta`, so such a
-/// property still gets a `ParamMeta` entry but no `Command` field.
-private func commandFieldInfo(for type: TypeSyntax) -> (kind: CommandFieldKind, required: Bool)? {
-    let (wrapped, required) = unwrappingOptional(type)
-    guard let kind = commandFieldKind(for: wrapped) else { return nil }
-    return (kind, required)
-}
-
 // MARK: - `@Guide` / `@OperationParam` introspection
 
 /// Finds every attribute named `name` in `attributes` and yields its
@@ -273,16 +242,6 @@ private func argumentLists(
         }
         return arguments
     }
-}
-
-/// Extracts the literal string values from an array-literal expression, or
-/// `nil` if `expr` isn't an array-literal expression.
-///
-/// Non-string-literal
-/// elements are silently dropped via `compactMap`.
-private func extractStringArrayLiterals(from expr: ExprSyntax) -> [String]? {
-    guard let arrayExpr = expr.as(ArrayExprSyntax.self) else { return nil }
-    return arrayExpr.elements.compactMap { $0.expression.plainStringLiteralValue }
 }
 
 /// Description and `anyOf` allowed values recognized from a property's
@@ -331,7 +290,7 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
 /// The `@OperationParam(aliases:)` argument label.
 ///
 /// Also the `ParamMeta`
-/// initializer argument label `paramMetaArgumentsText(propertyName:typeExprText:required:description:short:aliases:allowedValues:)`
+/// initializer argument label `operationParameterEntry(for:identifierPattern:variable:in:)`
 /// emits for it, since `@OperationParam`'s array-valued arguments round-trip
 /// directly into `ParamMeta`'s same-named initializer arguments — the two
 /// must agree by design. The single source of truth for this name; every
@@ -377,9 +336,9 @@ private func applyOperationParamArgument(
     }
 
     guard operationParamArrayArgumentLabels.contains(label),
-        let values = extractStringArrayLiterals(from: argument.expression)
+        let arrayExpr = argument.expression.as(ArrayExprSyntax.self)
     else { return }
-    arrayArguments[label] = values
+    arrayArguments[label] = arrayExpr.elements.compactMap { $0.expression.plainStringLiteralValue }
 }
 
 /// CLI affordances recognized from a property's `@OperationParam(...)`
@@ -449,7 +408,10 @@ public struct OperationMacro: ExtensionMacro {
         let (verbText, nounText, descriptionText) = verbNounDescriptionText(from: arguments, node: node, in: context)
 
         let parameterEntries = synthesizeOperationParameters(from: structDecl, in: context)
-        let parameterMetadataText = formatParameterMetadataText(parameterEntries)
+        let parameterMetadataText =
+            parameterEntries.isEmpty
+            ? "[]"
+            : "[\n\(parameterEntries.map { "    \($0.paramMetaText)," }.joined(separator: "\n"))\n]"
 
         let access = structDecl.modifiers.first(where: \.isNeededAccessLevelModifier)
         let accessText = access.map { "\($0.name.text) " } ?? ""
@@ -462,14 +424,15 @@ public struct OperationMacro: ExtensionMacro {
             fields: parameterEntries.compactMap(\.commandField)
         )
 
-        let membersText = generateExtensionMembersText(
-            accessText: accessText,
-            verbText: verbText,
-            nounText: nounText,
-            descriptionText: descriptionText,
-            parameterMetadataText: parameterMetadataText,
-            commandText: commandText
-        )
+        // The `OperationDefinition` conformance's static members plus the nested `Command` declaration.
+        let membersText = """
+            \(accessText)static let verb: String = \(verbText)
+            \(accessText)static let noun: String = \(nounText)
+            \(accessText)static let operationDescription: String = \(descriptionText)
+            \(accessText)static let parameterMetadata: [ParamMeta] = \(parameterMetadataText)
+
+            \(commandText)
+            """
 
         let extensionDecl = try ExtensionDeclSyntax(
             """
@@ -544,9 +507,9 @@ private func verbNounDescriptionText(
 /// parameter type at `location`.
 ///
 /// Shared by both unsupported-type call sites
-/// in `synthesizeOperationParameters(from:in:)` — a missing type annotation
-/// and a type `paramTypeInfo(for:)` can't map — which otherwise differ only
-/// in the diagnostic's location.
+/// in `operationParameterEntry(for:identifierPattern:variable:in:)` — a
+/// missing type annotation and a type `primitiveParamTypeExprText(_:)` can't
+/// map — which otherwise differ only in the diagnostic's location.
 private func diagnoseUnsupportedParameterType(
     _ propertyName: String,
     at location: some SyntaxProtocol,
@@ -559,9 +522,10 @@ private func diagnoseUnsupportedParameterType(
 /// array-valued argument.
 ///
 /// Shared by the `aliases` and `allowedValues`
-/// entries in `paramMetaArgumentsText(propertyName:typeExprText:required:description:short:aliases:allowedValues:)`,
-/// which otherwise differ only in the key, source collection, and when the
-/// argument is omitted entirely.
+/// entries `operationParameterEntry(for:identifierPattern:variable:in:)`
+/// builds for its `ParamMeta(...)` argument list, which otherwise differ
+/// only in the key, source collection, and when the argument is omitted
+/// entirely.
 private func arrayArgumentText(key: String, values: [String]) -> String {
     let valuesText = values.map(swiftStringLiteral).joined(separator: ", ")
     return "\(key): [\(valuesText)]"
@@ -608,8 +572,11 @@ private struct OperationParameterEntry {
     let paramMetaText: String
 
     /// The nested `Command`'s CLI representation of this parameter, or
-    /// `nil` when the type has none `@Operation` can generate (see
-    /// `commandFieldInfo(for:)`).
+    /// `nil` when the type has no CLI representation `@Operation` can
+    /// generate (e.g. a nested array) — distinct from, and a strict subset
+    /// of, the types `primitiveParamTypeExprText(_:)` accepts for
+    /// `ParamMeta`, so such a property still gets a `ParamMeta` entry but no
+    /// `Command` field (see `commandFieldKind(for:)`).
     let commandField: CommandFieldSpec?
 }
 
@@ -631,29 +598,23 @@ private func synthesizeOperationParameters(
     from structDecl: StructDeclSyntax,
     in context: some MacroExpansionContext
 ) -> [OperationParameterEntry] {
-    var entries: [OperationParameterEntry] = []
+    structDecl.memberBlock.members.flatMap { member -> [OperationParameterEntry] in
+        guard let variable = member.decl.as(VariableDeclSyntax.self) else { return [] }
+        guard !variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else { return [] }
 
-    for member in structDecl.memberBlock.members {
-        guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
-        guard !variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else { continue }
-
-        for binding in variable.bindings {
+        return variable.bindings.compactMap { binding -> OperationParameterEntry? in
             // Computed properties (accessor block present) aren't parameters.
-            guard binding.accessorBlock == nil else { continue }
-            guard let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
+            guard binding.accessorBlock == nil else { return nil }
+            guard let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) else { return nil }
 
-            if let entry = operationParameterEntry(
+            return operationParameterEntry(
                 for: binding,
                 identifierPattern: identifierPattern,
                 variable: variable,
                 in: context
-            ) {
-                entries.append(entry)
-            }
+            )
         }
     }
-
-    return entries
 }
 
 /// Builds the `OperationParameterEntry` for one candidate stored-property
@@ -685,39 +646,44 @@ private func operationParameterEntry(
         return nil
     }
 
-    if normalizedForReservedCheck(propertyName) == opFieldName {
+    if propertyName.lowercased().filter({ $0 != "_" && $0 != "-" }) == opFieldName {
         context.diagnose(
             OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
         )
         return nil
     }
 
-    guard let (typeExprText, required) = paramTypeInfo(for: typeAnnotation) else {
+    // Unwrapped once, reused below for both the `ParamMeta` and `Command` field mappings.
+    let (wrappedType, required) = unwrappingOptional(typeAnnotation)
+    guard let typeExprText = primitiveParamTypeExprText(wrappedType) else {
         diagnoseUnsupportedParameterType(propertyName, at: typeAnnotation, in: context)
         return nil
     }
 
     let guide = guideInfo(from: variable.attributes)
     let operationParam = operationParamInfo(from: variable.attributes)
-
     let description = guide.description ?? docCommentDescription(from: variable.leadingTrivia) ?? ""
     let allowedValues = operationParam.allowedValues ?? guide.allowedValues
 
-    let args = paramMetaArgumentsText(
-        propertyName: propertyName,
-        typeExprText: typeExprText,
-        required: required,
-        description: description,
-        short: operationParam.short,
-        aliases: operationParam.aliases,
-        allowedValues: allowedValues
-    )
+    // Each argument is appended only when set; a table avoids three near-identical checks.
+    let optionalArgs: [String?] = [
+        operationParam.short.map { "short: \(swiftStringLiteral(String($0)))" },
+        operationParam.aliases.isEmpty ? nil : arrayArgumentText(key: aliasesLabel, values: operationParam.aliases),
+        allowedValues.map { arrayArgumentText(key: allowedValuesLabel, values: $0) },
+    ]
+    let args =
+        [
+            "name: \(swiftStringLiteral(propertyName))",
+            "type: \(typeExprText)",
+            "required: \(required)",
+            "description: \(swiftStringLiteral(description))",
+        ] + optionalArgs.compactMap { $0 }
 
-    let commandField = commandFieldInfo(for: typeAnnotation).map {
+    let commandField = commandFieldKind(for: wrappedType).map {
         CommandFieldSpec(
             name: propertyName,
-            kind: $0.kind,
-            required: $0.required,
+            kind: $0,
+            required: required,
             description: description,
             short: operationParam.short
         )
@@ -727,66 +693,6 @@ private func operationParameterEntry(
         paramMetaText: "ParamMeta(\(args.joined(separator: ", ")))",
         commandField: commandField
     )
-}
-
-/// Builds the `ParamMeta(...)` call-expression argument list for one
-/// parameter, in initializer-argument order.
-///
-/// - Parameters:
-///   - propertyName: The parameter's `name` argument value.
-///   - typeExprText: The `type` argument's source text, as produced by
-///     `paramTypeInfo(for:)`.
-///   - required: The `required` argument value.
-///   - description: The `description` argument value.
-///   - short: The `@OperationParam(short:)` value, if supplied; appended as
-///     `short:` when non-`nil`.
-///   - aliases: The `@OperationParam(aliases:)` values; appended as
-///     `aliases:` when non-empty.
-///   - allowedValues: The resolved allowed-values constraint (from
-///     `@OperationParam(allowedValues:)` or `@Guide`'s `.anyOf`), if any.
-///     Unlike `aliases`, this distinguishes "unset" (`nil`, no constraint)
-///     from "set to an empty closed set" (`[]`), so it's appended whenever
-///     non-`nil` rather than gated on non-empty.
-/// - Returns: The `ParamMeta(...)` initializer's argument-expression source
-///   texts, in order.
-private func paramMetaArgumentsText(
-    propertyName: String,
-    typeExprText: String,
-    required: Bool,
-    description: String,
-    short: Character?,
-    aliases: [String],
-    allowedValues: [String]?
-) -> [String] {
-    var args = [
-        "name: \(swiftStringLiteral(propertyName))",
-        "type: \(typeExprText)",
-        "required: \(required)",
-        "description: \(swiftStringLiteral(description))",
-    ]
-    if let short {
-        args.append("short: \(swiftStringLiteral(String(short)))")
-    }
-    if !aliases.isEmpty {
-        args.append(arrayArgumentText(key: aliasesLabel, values: aliases))
-    }
-    if let allowedValues {
-        args.append(arrayArgumentText(key: allowedValuesLabel, values: allowedValues))
-    }
-    return args
-}
-
-/// Formats synthesized `OperationParameterEntry`s' `ParamMeta(...)` text as
-/// the source text of a `[ParamMeta]` array literal, one entry per line.
-///
-/// - Parameter entries: The entries produced by
-///   `synthesizeOperationParameters(from:in:)`.
-/// - Returns: `"[]"` when `entries` is empty, otherwise a multi-line array
-///   literal with each entry indented and comma-terminated.
-private func formatParameterMetadataText(_ entries: [OperationParameterEntry]) -> String {
-    guard !entries.isEmpty else { return "[]" }
-    let joined = entries.map { "    \($0.paramMetaText)," }.joined(separator: "\n")
-    return "[\n\(joined)\n]"
 }
 
 /// Builds the source text of one nested `Command` property: its
@@ -910,42 +816,6 @@ private func commandStructText(
             }
         }
         """
-}
-
-/// Builds the source text of the `OperationDefinition` conformance's static
-/// members (`verb`, `noun`, `operationDescription`, `parameterMetadata`) and
-/// the nested `Command` declaration.
-///
-/// - Parameters:
-///   - accessText: The access-level modifier text to prefix each member
-///     with (e.g. `"public "`), or `""` for no explicit modifier.
-///   - verbText: The source text of the `verb` static's initializer.
-///   - nounText: The source text of the `noun` static's initializer.
-///   - descriptionText: The source text of the `operationDescription`
-///     static's initializer.
-///   - parameterMetadataText: The source text of the `parameterMetadata`
-///     static's `[ParamMeta]` initializer, as produced by
-///     `formatParameterMetadataText(_:)`.
-///   - commandText: The nested `Command` declaration source text, as
-///     produced by `commandStructText(accessText:structTypeName:verbText:descriptionText:fields:)`.
-/// - Returns: The declaration source text for the four static members plus
-///   `Command`, ready to splice into the generated extension's body.
-private func generateExtensionMembersText(
-    accessText: String,
-    verbText: String,
-    nounText: String,
-    descriptionText: String,
-    parameterMetadataText: String,
-    commandText: String
-) -> String {
-    """
-    \(accessText)static let verb: String = \(verbText)
-    \(accessText)static let noun: String = \(nounText)
-    \(accessText)static let operationDescription: String = \(descriptionText)
-    \(accessText)static let parameterMetadata: [ParamMeta] = \(parameterMetadataText)
-
-    \(commandText)
-    """
 }
 
 // MARK: - `@OperationParam`
