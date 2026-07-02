@@ -161,6 +161,33 @@ private func paramTypeInfo(for type: TypeSyntax) -> (typeExprText: String, requi
 
 // MARK: - `@Guide` / `@OperationParam` introspection
 
+/// Finds every attribute named `name` in `attributes` and yields its
+/// argument list, skipping attributes that carry no parenthesized arguments.
+/// Shared by `guideInfo(from:)` and `operationParamInfo(from:)`, which differ
+/// only in the attribute name they look for.
+private func argumentLists(
+    forAttributeNamed name: String,
+    in attributes: AttributeListSyntax
+) -> [LabeledExprListSyntax] {
+    attributes.compactMap { element in
+        guard case .attribute(let attribute) = element,
+            attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == name,
+            case .argumentList(let arguments) = attribute.arguments
+        else {
+            return nil
+        }
+        return arguments
+    }
+}
+
+/// Extracts the literal string values from an array-literal expression, or
+/// `nil` if `expr` isn't an array-literal expression. Non-string-literal
+/// elements are silently dropped via `compactMap`.
+private func extractStringArrayLiterals(from expr: ExprSyntax) -> [String]? {
+    guard let arrayExpr = expr.as(ArrayExprSyntax.self) else { return nil }
+    return arrayExpr.elements.compactMap { $0.expression.plainStringLiteralValue }
+}
+
 /// Description and `anyOf` allowed values recognized from a property's
 /// `@Guide(...)` attribute, per plan.md's extraction contract: only literal
 /// `description:` strings and a literal `.anyOf([...])` guide are read;
@@ -169,14 +196,7 @@ private func guideInfo(from attributes: AttributeListSyntax) -> (description: St
     var description: String?
     var allowedValues: [String]?
 
-    for element in attributes {
-        guard case .attribute(let attribute) = element,
-            attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "Guide",
-            case .argumentList(let arguments) = attribute.arguments
-        else {
-            continue
-        }
-
+    for arguments in argumentLists(forAttributeNamed: "Guide", in: attributes) {
         for argument in arguments {
             if argument.label?.text == "description", let literal = argument.expression.plainStringLiteralValue {
                 description = literal
@@ -220,14 +240,7 @@ private func operationParamInfo(
     var aliases: [String] = []
     var allowedValues: [String]?
 
-    for element in attributes {
-        guard case .attribute(let attribute) = element,
-            attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "OperationParam",
-            case .argumentList(let arguments) = attribute.arguments
-        else {
-            continue
-        }
-
+    for arguments in argumentLists(forAttributeNamed: "OperationParam", in: attributes) {
         for argument in arguments {
             switch argument.label?.text {
             case "short":
@@ -235,13 +248,9 @@ private func operationParamInfo(
                     short = first
                 }
             case "aliases":
-                if let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
-                    aliases = arrayExpr.elements.compactMap { $0.expression.plainStringLiteralValue }
-                }
+                aliases = extractStringArrayLiterals(from: argument.expression) ?? aliases
             case "allowedValues":
-                if let arrayExpr = argument.expression.as(ArrayExprSyntax.self) {
-                    allowedValues = arrayExpr.elements.compactMap { $0.expression.plainStringLiteralValue }
-                }
+                allowedValues = extractStringArrayLiterals(from: argument.expression) ?? allowedValues
             default:
                 break
             }
@@ -262,6 +271,26 @@ private func operationParamInfo(
 /// `ArgumentParser` `Command` for the dual-use CLI is a separate, later
 /// task — this macro covers metadata only.
 public struct OperationMacro: ExtensionMacro {
+    /// Expands `@Operation(verb:noun:description:)` into an
+    /// `OperationDefinition` conformance extension on the annotated struct.
+    ///
+    /// - Parameters:
+    ///   - node: The `@Operation(...)` attribute syntax; its `verb`, `noun`,
+    ///     and `description` arguments seed the synthesized statics.
+    ///   - declaration: The declaration the attribute is attached to. Must
+    ///     be a `StructDeclSyntax`; otherwise `.requiresStruct` is diagnosed
+    ///     and expansion produces no extension.
+    ///   - type: The type being extended, used as the generated extension's
+    ///     subject.
+    ///   - protocols: The protocols this expansion was asked to conform to.
+    ///     Unused: `OperationDefinition` conformance is always synthesized
+    ///     regardless of this list.
+    ///   - context: The macro expansion context used to emit diagnostics
+    ///     (unsupported types, empty `verb`/`noun`, reserved parameter
+    ///     names).
+    /// - Returns: A single-element array containing the synthesized
+    ///   `OperationDefinition` conformance extension, or an empty array if
+    ///   `declaration` isn't a struct or `node` carries no argument list.
     public static func expansion(
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -278,104 +307,21 @@ public struct OperationMacro: ExtensionMacro {
             return []
         }
 
-        let verbExpr = arguments.first(labeled: "verb")?.expression
-        let nounExpr = arguments.first(labeled: "noun")?.expression
-        let descriptionExpr = arguments.first(labeled: "description")?.expression
+        let (verbText, nounText, descriptionText) = verbNounDescriptionText(from: arguments, node: node, in: context)
 
-        if verbExpr?.plainStringLiteralValue?.isEmpty ?? (verbExpr == nil) {
-            context.diagnose(
-                OperationMacroDiagnostic.verbMustNotBeEmpty.diagnose(at: verbExpr.map(Syntax.init) ?? Syntax(node))
-            )
-        }
-        if nounExpr?.plainStringLiteralValue?.isEmpty ?? (nounExpr == nil) {
-            context.diagnose(
-                OperationMacroDiagnostic.nounMustNotBeEmpty.diagnose(at: nounExpr.map(Syntax.init) ?? Syntax(node))
-            )
-        }
-
-        let verbText = verbExpr?.trimmedDescription ?? "\"\""
-        let nounText = nounExpr?.trimmedDescription ?? "\"\""
-        let descriptionText = descriptionExpr?.trimmedDescription ?? "\"\""
-
-        var paramMetaEntries: [String] = []
-
-        for member in structDecl.memberBlock.members {
-            guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
-            guard !variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else { continue }
-
-            for binding in variable.bindings {
-                // Computed properties (accessor block present) aren't parameters.
-                guard binding.accessorBlock == nil else { continue }
-                guard let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
-
-                let propertyName = identifierPattern.identifier.text
-
-                guard let typeAnnotation = binding.typeAnnotation?.type else {
-                    context.diagnose(
-                        OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: binding)
-                    )
-                    continue
-                }
-
-                if normalizedForReservedCheck(propertyName) == "op" {
-                    context.diagnose(
-                        OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
-                    )
-                    continue
-                }
-
-                guard let (typeExprText, required) = paramTypeInfo(for: typeAnnotation) else {
-                    context.diagnose(
-                        OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: typeAnnotation)
-                    )
-                    continue
-                }
-
-                let guide = guideInfo(from: variable.attributes)
-                let operationParam = operationParamInfo(from: variable.attributes)
-
-                let description = guide.description ?? docCommentDescription(from: variable.leadingTrivia) ?? ""
-                let allowedValues = operationParam.allowedValues ?? guide.allowedValues
-
-                var args = [
-                    "name: \(swiftStringLiteral(propertyName))",
-                    "type: \(typeExprText)",
-                    "required: \(required)",
-                    "description: \(swiftStringLiteral(description))",
-                ]
-                if let short = operationParam.short {
-                    args.append("short: \(swiftStringLiteral(String(short)))")
-                }
-                if !operationParam.aliases.isEmpty {
-                    let aliasesText = operationParam.aliases.map(swiftStringLiteral).joined(separator: ", ")
-                    args.append("aliases: [\(aliasesText)]")
-                }
-                if let allowedValues {
-                    let allowedValuesText = allowedValues.map(swiftStringLiteral).joined(separator: ", ")
-                    args.append("allowedValues: [\(allowedValuesText)]")
-                }
-
-                paramMetaEntries.append("ParamMeta(\(args.joined(separator: ", ")))")
-            }
-        }
-
-        let parameterMetadataText: String
-        if paramMetaEntries.isEmpty {
-            parameterMetadataText = "[]"
-        } else {
-            let entries = paramMetaEntries.map { "    \($0)," }.joined(separator: "\n")
-            parameterMetadataText = "[\n\(entries)\n]"
-        }
+        let paramMetaEntries = synthesizeParameterMetadata(from: structDecl, in: context)
+        let parameterMetadataText = formatParameterMetadataText(paramMetaEntries)
 
         let access = structDecl.modifiers.first(where: \.isNeededAccessLevelModifier)
         let accessText = access.map { "\($0.name.text) " } ?? ""
 
-        let membersText = """
-            \(accessText)static let verb: String = \(verbText)
-            \(accessText)static let noun: String = \(nounText)
-            \(accessText)static let operationDescription: String = \(descriptionText)
-            \(accessText)static let parameterMetadata: [ParamMeta] = \(parameterMetadataText)
-            """
+        let membersText = generateExtensionMembersText(
+            accessText: accessText,
+            verbText: verbText,
+            nounText: nounText,
+            descriptionText: descriptionText,
+            parameterMetadataText: parameterMetadataText
+        )
 
         let extensionDecl = try ExtensionDeclSyntax(
             """
@@ -389,6 +335,172 @@ public struct OperationMacro: ExtensionMacro {
     }
 }
 
+/// Derives the source text of `verb`, `noun`, and `description` from an
+/// `@Operation(...)` attribute's argument list, diagnosing (via `context`)
+/// when `verb` or `noun` is missing entirely or is an empty string literal.
+///
+/// - Parameters:
+///   - arguments: The `@Operation(...)` attribute's argument list.
+///   - node: The attribute syntax, used as the diagnostic location when
+///     `verb`/`noun` is missing entirely (so there's no argument expression
+///     to point the diagnostic at).
+///   - context: The macro expansion context used to emit diagnostics.
+/// - Returns: The source text of the `verb`, `noun`, and `description`
+///   argument expressions, each defaulting to `"\"\""` when absent.
+private func verbNounDescriptionText(
+    from arguments: LabeledExprListSyntax,
+    node: AttributeSyntax,
+    in context: some MacroExpansionContext
+) -> (verbText: String, nounText: String, descriptionText: String) {
+    let verbExpr = arguments.first(labeled: "verb")?.expression
+    let nounExpr = arguments.first(labeled: "noun")?.expression
+    let descriptionExpr = arguments.first(labeled: "description")?.expression
+
+    if verbExpr?.plainStringLiteralValue?.isEmpty ?? (verbExpr == nil) {
+        context.diagnose(
+            OperationMacroDiagnostic.verbMustNotBeEmpty.diagnose(at: verbExpr.map(Syntax.init) ?? Syntax(node))
+        )
+    }
+    if nounExpr?.plainStringLiteralValue?.isEmpty ?? (nounExpr == nil) {
+        context.diagnose(
+            OperationMacroDiagnostic.nounMustNotBeEmpty.diagnose(at: nounExpr.map(Syntax.init) ?? Syntax(node))
+        )
+    }
+
+    let verbText = verbExpr?.trimmedDescription ?? "\"\""
+    let nounText = nounExpr?.trimmedDescription ?? "\"\""
+    let descriptionText = descriptionExpr?.trimmedDescription ?? "\"\""
+
+    return (verbText, nounText, descriptionText)
+}
+
+/// Synthesizes one `ParamMeta(...)` source-text entry per eligible stored
+/// property of `structDecl`, in declaration order.
+///
+/// Computed properties (an accessor block present), `static` properties, and
+/// properties without a type annotation are skipped. Diagnoses (via
+/// `context`) and skips properties with the reserved name `"op"` or with a
+/// type `@Operation` can't map to a `ParamType`.
+///
+/// - Parameters:
+///   - structDecl: The struct declaration whose stored properties become
+///     parameters.
+///   - context: The macro expansion context used to emit diagnostics for
+///     invalid properties.
+/// - Returns: The source text of each synthesized `ParamMeta(...)` call
+///   expression, one per eligible property.
+private func synthesizeParameterMetadata(
+    from structDecl: StructDeclSyntax,
+    in context: some MacroExpansionContext
+) -> [String] {
+    var paramMetaEntries: [String] = []
+
+    for member in structDecl.memberBlock.members {
+        guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
+        guard !variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.static) }) else { continue }
+
+        for binding in variable.bindings {
+            // Computed properties (accessor block present) aren't parameters.
+            guard binding.accessorBlock == nil else { continue }
+            guard let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) else { continue }
+
+            let propertyName = identifierPattern.identifier.text
+
+            guard let typeAnnotation = binding.typeAnnotation?.type else {
+                context.diagnose(
+                    OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: binding)
+                )
+                continue
+            }
+
+            if normalizedForReservedCheck(propertyName) == "op" {
+                context.diagnose(
+                    OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
+                )
+                continue
+            }
+
+            guard let (typeExprText, required) = paramTypeInfo(for: typeAnnotation) else {
+                context.diagnose(
+                    OperationMacroDiagnostic.unsupportedParameterType(propertyName).diagnose(at: typeAnnotation)
+                )
+                continue
+            }
+
+            let guide = guideInfo(from: variable.attributes)
+            let operationParam = operationParamInfo(from: variable.attributes)
+
+            let description = guide.description ?? docCommentDescription(from: variable.leadingTrivia) ?? ""
+            let allowedValues = operationParam.allowedValues ?? guide.allowedValues
+
+            var args = [
+                "name: \(swiftStringLiteral(propertyName))",
+                "type: \(typeExprText)",
+                "required: \(required)",
+                "description: \(swiftStringLiteral(description))",
+            ]
+            if let short = operationParam.short {
+                args.append("short: \(swiftStringLiteral(String(short)))")
+            }
+            if !operationParam.aliases.isEmpty {
+                let aliasesText = operationParam.aliases.map(swiftStringLiteral).joined(separator: ", ")
+                args.append("aliases: [\(aliasesText)]")
+            }
+            if let allowedValues {
+                let allowedValuesText = allowedValues.map(swiftStringLiteral).joined(separator: ", ")
+                args.append("allowedValues: [\(allowedValuesText)]")
+            }
+
+            paramMetaEntries.append("ParamMeta(\(args.joined(separator: ", ")))")
+        }
+    }
+
+    return paramMetaEntries
+}
+
+/// Formats synthesized `ParamMeta(...)` entries as the source text of a
+/// `[ParamMeta]` array literal, one entry per line.
+///
+/// - Parameter entries: The `ParamMeta(...)` call-expression source text
+///   produced by `synthesizeParameterMetadata(from:in:)`.
+/// - Returns: `"[]"` when `entries` is empty, otherwise a multi-line array
+///   literal with each entry indented and comma-terminated.
+private func formatParameterMetadataText(_ entries: [String]) -> String {
+    guard !entries.isEmpty else { return "[]" }
+    let joined = entries.map { "    \($0)," }.joined(separator: "\n")
+    return "[\n\(joined)\n]"
+}
+
+/// Builds the source text of the `OperationDefinition` conformance's static
+/// members: `verb`, `noun`, `operationDescription`, and `parameterMetadata`.
+///
+/// - Parameters:
+///   - accessText: The access-level modifier text to prefix each member
+///     with (e.g. `"public "`), or `""` for no explicit modifier.
+///   - verbText: The source text of the `verb` static's initializer.
+///   - nounText: The source text of the `noun` static's initializer.
+///   - descriptionText: The source text of the `operationDescription`
+///     static's initializer.
+///   - parameterMetadataText: The source text of the `parameterMetadata`
+///     static's `[ParamMeta]` initializer, as produced by
+///     `formatParameterMetadataText(_:)`.
+/// - Returns: The declaration source text for all four static members,
+///   ready to splice into the generated extension's body.
+private func generateExtensionMembersText(
+    accessText: String,
+    verbText: String,
+    nounText: String,
+    descriptionText: String,
+    parameterMetadataText: String
+) -> String {
+    """
+    \(accessText)static let verb: String = \(verbText)
+    \(accessText)static let noun: String = \(nounText)
+    \(accessText)static let operationDescription: String = \(descriptionText)
+    \(accessText)static let parameterMetadata: [ParamMeta] = \(parameterMetadataText)
+    """
+}
+
 // MARK: - `@OperationParam`
 
 /// Implements the `@OperationParam` attached macro declared in the
@@ -398,6 +510,22 @@ public struct OperationMacro: ExtensionMacro {
 /// synthesizing `parameterMetadata`, but the attribute itself expands to no
 /// code of its own.
 public struct OperationParamMacro: PeerMacro {
+    /// Expands `@OperationParam(short:aliases:allowedValues:)`.
+    ///
+    /// This is a no-op expansion: `@OperationParam` exists only to be read
+    /// back out by `OperationMacro`'s `operationParamInfo(from:)` while it
+    /// synthesizes `parameterMetadata`, so this peer macro never emits any
+    /// declarations of its own.
+    ///
+    /// - Parameters:
+    ///   - node: The `@OperationParam(...)` attribute syntax (unused here;
+    ///     its arguments are read directly by `operationParamInfo(from:)`).
+    ///   - declaration: The declaration the attribute is attached to
+    ///     (unused).
+    ///   - context: The macro expansion context (unused; this expansion
+    ///     never diagnoses).
+    /// - Returns: An empty array; this macro never produces peer
+    ///   declarations.
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
