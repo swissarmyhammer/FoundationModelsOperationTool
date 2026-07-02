@@ -132,6 +132,18 @@ private func docCommentDescription(from trivia: Trivia) -> String? {
 
 // MARK: - Type mapping
 
+/// Maps a supported primitive Swift type name to the source text of its
+/// corresponding `ParamType` case. The single source of truth for which
+/// primitive types `@Operation` supports, so adding or changing a mapping is
+/// a one-line edit instead of a switch arm kept in sync by hand.
+private let primitiveTypeMapping: [String: String] = [
+    "String": ".string",
+    "Int": ".integer",
+    "Double": ".number",
+    "Float": ".number",
+    "Bool": ".boolean",
+]
+
 /// Maps a non-`Optional` field type to the source text of a `ParamType`
 /// expression (e.g. `.string`, `.array(of: .string)`), or `nil` if the type
 /// isn't one `@Operation` supports.
@@ -141,13 +153,7 @@ private func primitiveParamTypeExprText(_ type: TypeSyntax) -> String? {
         return ".array(of: \(elementText))"
     }
     if let identifierType = type.as(IdentifierTypeSyntax.self) {
-        switch identifierType.name.text {
-        case "String": return ".string"
-        case "Int": return ".integer"
-        case "Double", "Float": return ".number"
-        case "Bool": return ".boolean"
-        default: return nil
-        }
+        return primitiveTypeMapping[identifierType.name.text]
     }
     return nil
 }
