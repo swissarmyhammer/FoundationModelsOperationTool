@@ -23,6 +23,16 @@ public struct AnyOperation<Context: Sendable>: Sendable {
     /// One entry per parameter, in declaration order.
     public let parameters: [ParamMeta]
 
+    /// The canonical `"verb noun"` identifier the resolver and schema
+    /// fusion match against (e.g. `"add note"`).
+    ///
+    /// Mirrors `OperationDefinition.opString`'s default rendering; computed
+    /// from `verb`/`noun` rather than stored separately, so it can never
+    /// drift from them.
+    public var opString: String {
+        "\(verb) \(noun)"
+    }
+
     /// Decodes `content` into the concrete operation type, executes it
     /// against `context`, and returns the JSON-encoded result.
     ///
