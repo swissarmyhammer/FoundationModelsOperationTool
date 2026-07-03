@@ -24,8 +24,8 @@ depends_on:
 - 01KWHQQNZ644BZC5G1M4XGV0J0
 - 01KWHQE4DGF0QBTTJCVRNVAMRA
 - 01KWHQEN01Q45DWC20MRSSTRTT
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8780'
 title: 'NotesTool example: dual-use end-to-end + live-model validation harness'
 ---
 ## What

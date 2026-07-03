@@ -57,7 +57,14 @@ let package = Package(
 
         .testTarget(
             name: "OperationsTests",
-            dependencies: ["Operations"]
+            dependencies: [
+                "Operations",
+                // `DocCoverageTests.swift` parses `Sources/Operations` and
+                // `Sources/OperationsCLI` with SwiftSyntax to enforce doc
+                // coverage on every public declaration.
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+            ]
         ),
         .testTarget(
             name: "OperationsMacrosTests",

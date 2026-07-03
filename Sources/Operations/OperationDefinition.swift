@@ -46,6 +46,10 @@ public protocol OperationDefinition: Generable, Sendable {
 }
 
 extension OperationDefinition {
+    /// The default `opString`: `"\(verb) \(noun)"`.
+    ///
+    /// A conforming type only needs to override this if it wants an
+    /// `opString` that doesn't follow the standard `"verb noun"` shape.
     public static var opString: String {
         "\(verb) \(noun)"
     }
