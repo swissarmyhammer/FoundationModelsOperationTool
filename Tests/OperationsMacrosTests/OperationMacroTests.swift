@@ -297,6 +297,63 @@ private let operationMacroSpecs: [String: MacroSpec] = [
         )
     }
 
+    // MARK: - Explicit non-`public` access-level modifier
+
+    /// An explicit non-`public` access modifier — as opposed to omitting an
+    /// access modifier entirely, which never even invokes the predicate,
+    /// since `Array.first(where:)` short-circuits on an empty
+    /// `modifiers` collection — exercises
+    /// `DeclModifierSyntax.isNeededAccessLevelModifier`'s `default: return
+    /// false` branch. The generated extension's members still carry no
+    /// explicit access modifier, identical to the implicit-internal case.
+    @Test func explicitInternalAccessModifierProducesNoAccessModifierPrefix() {
+        assertMacroExpansion(
+            """
+            @Operation(verb: "list", noun: "notes", description: "List every note")
+            internal struct ListNotes {
+            }
+            """,
+            expandedSource: """
+                internal struct ListNotes {
+                }
+
+                extension ListNotes: OperationDefinition, HasCLICommand {
+                    static let verb: String = "list"
+                    static let noun: String = "notes"
+                    static let operationDescription: String = "List every note"
+                    static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand, OperationCommand {
+                        static let configuration = CommandConfiguration(commandName: "list", abstract: "List every note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", ListNotes.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
+
+                    typealias CLICommand = Command
+                }
+                """,
+            macroSpecs: operationMacroSpecs
+        )
+    }
+
     // MARK: - `@OperationParam` short/aliases
 
     @Test func operationParamSuppliesShortAndAliases() {
@@ -396,6 +453,68 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         func operationPayload() -> GeneratedContent {
                             var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
                             payload.append(("priority", priority))
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
+
+                    typealias CLICommand = Command
+                }
+                """,
+            macroSpecs: operationMacroSpecs
+        )
+    }
+
+    // MARK: - `@Guide` with a non-`anyOf` constraint argument
+
+    /// A `@Guide` constraint argument that isn't a recognized
+    /// `.anyOf([...])` call (here `.range(...)`) doesn't satisfy
+    /// `anyOfAllowedValues(from:)`'s recognized shape, so `allowedValues` is
+    /// correctly omitted from the generated `ParamMeta(...)` rather than
+    /// mis-parsed as an empty or partial array.
+    @Test func guideRangeConstraintOmitsAllowedValues() {
+        assertMacroExpansion(
+            """
+            @Operation(verb: "update", noun: "note", description: "Update a note")
+            struct UpdateNote {
+                @Guide(description: "Number of reviews", .range(1...10))
+                var reviewCount: Int
+            }
+            """,
+            expandedSource: """
+                struct UpdateNote {
+                    @Guide(description: "Number of reviews", .range(1...10))
+                    var reviewCount: Int
+                }
+
+                extension UpdateNote: OperationDefinition, HasCLICommand {
+                    static let verb: String = "update"
+                    static let noun: String = "note"
+                    static let operationDescription: String = "Update a note"
+                    static let parameterMetadata: [ParamMeta] = [
+                        ParamMeta(name: "reviewCount", type: .integer, required: true, description: "Number of reviews"),
+                    ]
+
+                    struct Command: AsyncParsableCommand, OperationCommand {
+                        static let configuration = CommandConfiguration(commandName: "update", abstract: "Update a note")
+
+                        @Option(help: "Number of reviews")
+                        var reviewCount: Int
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", UpdateNote.opString)]
+                            payload.append(("reviewCount", reviewCount))
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
                                 })
@@ -711,6 +830,70 @@ private let operationMacroSpecs: [String: MacroSpec] = [
         )
     }
 
+    /// A structurally unusual type — here a dictionary type — rather than
+    /// merely an unrecognized identifier type (as `Date` above is), so
+    /// neither `TypeSyntax.as(ArrayTypeSyntax.self)` nor
+    /// `TypeSyntax.as(IdentifierTypeSyntax.self)` matches and
+    /// `primitiveParamTypeExprText(_:)` falls through its final `return
+    /// nil`.
+    @Test func structurallyUnsupportedDictionaryTypeProducesDiagnostic() {
+        assertMacroExpansion(
+            """
+            @Operation(verb: "add", noun: "note", description: "Create a new note")
+            struct AddNote {
+                var tags: [String: Int]
+            }
+            """,
+            expandedSource: """
+                struct AddNote {
+                    var tags: [String: Int]
+                }
+
+                extension AddNote: OperationDefinition, HasCLICommand {
+                    static let verb: String = "add"
+                    static let noun: String = "note"
+                    static let operationDescription: String = "Create a new note"
+                    static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand, OperationCommand {
+                        static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
+
+                    typealias CLICommand = Command
+                }
+                """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message:
+                        "parameter 'tags' has an unsupported type; '@Operation' supports String, Int, Double, Float, Bool, Array of those, and Optional wrapping any of those",
+                    line: 3,
+                    column: 15
+                )
+            ],
+            macroSpecs: operationMacroSpecs
+        )
+    }
+
     // MARK: - Missing verb / noun diagnostics
 
     @Test func emptyVerbProducesDiagnostic() {
@@ -819,6 +1002,62 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     column: 31
                 )
             ],
+            macroSpecs: operationMacroSpecs
+        )
+    }
+
+    // MARK: - Non-literal `verb` argument
+
+    /// A `verb` argument that isn't a plain string literal (e.g. an
+    /// interpolated string) doesn't satisfy
+    /// `ExprSyntax.plainStringLiteralValue`, so
+    /// `validateNonEmptyStringArgument` can't classify it as empty and emits
+    /// no diagnostic — the argument's raw source text is instead embedded
+    /// verbatim into the generated `verb` static and `commandName`.
+    @Test func nonLiteralVerbArgumentIsEmbeddedVerbatimWithoutADiagnostic() {
+        assertMacroExpansion(
+            """
+            @Operation(verb: "\\(dynamicVerb)", noun: "note", description: "Create a new note")
+            struct AddNote {
+            }
+            """,
+            expandedSource: """
+                struct AddNote {
+                }
+
+                extension AddNote: OperationDefinition, HasCLICommand {
+                    static let verb: String = "\\(dynamicVerb)"
+                    static let noun: String = "note"
+                    static let operationDescription: String = "Create a new note"
+                    static let parameterMetadata: [ParamMeta] = []
+
+                    struct Command: AsyncParsableCommand, OperationCommand {
+                        static let configuration = CommandConfiguration(commandName: "\\(dynamicVerb)", abstract: "Create a new note")
+
+
+
+                        init() {
+                        }
+
+                        /// The canonical `op` + fields payload built from this command's
+                        /// parsed values, in the identical shape `AnyOperation.run`
+                        /// expects and the model path sends.
+                        func operationPayload() -> GeneratedContent {
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+
+                            return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
+                                    new
+                                })
+                        }
+
+                        mutating func run() async throws {
+                            print(operationPayload().jsonString)
+                        }
+                    }
+
+                    typealias CLICommand = Command
+                }
+                """,
             macroSpecs: operationMacroSpecs
         )
     }

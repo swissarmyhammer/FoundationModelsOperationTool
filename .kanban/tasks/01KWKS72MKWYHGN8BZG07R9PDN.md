@@ -1,6 +1,23 @@
 ---
-position_column: todo
-position_ordinal: 8c80
+comments:
+- actor: wballard
+  id: 01kwm7q57898w4yk179hhdxajz
+  text: |-
+    Added 4 new tests to Tests/OperationsMacrosTests/OperationMacroTests.swift covering the reachable fallback branches:
+
+    - `nonLiteralVerbArgumentIsEmbeddedVerbatimWithoutADiagnostic` (line ~76, `ExprSyntax.plainStringLiteralValue` -> nil for interpolated string). Traced `validateNonEmptyStringArgument`'s condition (`expr?.plainStringLiteralValue?.isEmpty ?? (expr == nil)`) by hand: when `expr` is present but non-literal, optional chaining flattens the whole expression to `nil`, and `nil ?? (expr == nil)` evaluates to `false` since `expr` is non-nil — so a non-literal `verb` produces NO diagnostic; its raw source text is instead embedded verbatim into the generated `verb` static and `commandName`. Test asserts exactly that (no `diagnostics:` argument, and `"\(dynamicVerb)"` echoed into both call sites).
+    - `explicitInternalAccessModifierProducesNoAccessModifierPrefix` (lines ~83-88, `DeclModifierSyntax.isNeededAccessLevelModifier`'s `default: return false`). All existing tests use structs with NO explicit access modifier at all, so `modifiers.first(where:)` short-circuits on the empty collection without ever calling the predicate — that's a different (already-covered) path. Used an explicit `internal struct ListNotes` so the modifiers array is non-empty and the predicate actually runs, hitting `default: return false`. Confirmed the generated extension still carries no explicit access-level prefix, identical to the implicit-internal case.
+    - `structurallyUnsupportedDictionaryTypeProducesDiagnostic` (line ~179, `primitiveParamTypeExprText` final `return nil`). Used `[String: Int]` (a `DictionaryTypeSyntax`) rather than an unrecognized identifier type (the existing `Date` test exercises a different, already-covered failure point — `primitiveTypeMapping[identifierType.name.text]` returning nil after a successful `IdentifierTypeSyntax` cast). Dictionary type matches neither `ArrayTypeSyntax` nor `IdentifierTypeSyntax`, falling through to the final `return nil`.
+    - `guideRangeConstraintOmitsAllowedValues` (line ~293, `anyOfAllowedValues` -> nil for a non-`.anyOf` constraint). Used `@Guide(description: ..., .range(1...10))` — an unlabeled `@Guide` argument that isn't a recognized `.anyOf([...])` call, so `anyOfAllowedValues(from:)` falls through its guard to `return nil`. Confirmed `allowedValues` is correctly omitted from the generated `ParamMeta(...)` (not mis-parsed as `[]` or partial).
+
+    Line ~431 (`guard case .argumentList(let arguments) = node.arguments else { return [] }`) investigated and found UNREACHABLE through real, valid Swift source — no test added, following the precedent set by ^p02890h and ^2phzv79. Investigation: `Operations.swift` declares `public macro Operation(verb: String, noun: String, description: String)` with no default values on any parameter. `node.arguments` is only ever `nil` (bare `@Operation`, no parens) or `.argumentList(...)` (parens present) for a custom attached macro — there's no third syntactic shape available to user-defined macro attributes. Empirically verified by adding a scratch file (`@Operation` with no arguments at all, applied to a struct in the `NotesToolCore` target, which really imports and uses the macro) and running `swift build`: the compiler rejects it at the call-matching/type-checking stage, before the macro plugin's `expansion` ever runs — `error: missing arguments for parameters 'verb', 'noun', 'description' in macro expansion`. The scratch file was removed immediately after and a clean `swift build` was reconfirmed. Since real compiled source can never produce a bare `@Operation` that still type-checks, `node.arguments` is always `.argumentList` by the time `expansion(...)` runs on valid input, making the `else { return [] }` branch dead code reachable only by directly driving `OperationMacro.expansion` off a hand-built syntax tree (i.e. forceable only through the raw `assertMacroExpansion` test harness bypassing the macro's declared signature) — not through anything a real `@Operation` user could write.
+
+    Verification: `rm -rf .build && swift build` — clean, 0 warnings. `swift test` (all 4 targets) — 172 tests (72 + 34 + 44 + 22, up from 168/30 pre-change by exactly the 4 new tests), 0 failures. `swift test --filter OperationMacroTests` run in isolation first — all 18 tests (14 existing + 4 new) passed on the first try. Local `/review` engine (`review working`) returned 0 findings. Diff is scoped to `Tests/OperationsMacrosTests/OperationMacroTests.swift` only (239 insertions, 4 new `@Test` methods); `Sources/OperationsMacros/OperationsMacros.swift` is untouched.
+
+    Leaving task in `doing` per process — not moving to review myself.
+  timestamp: 2026-07-03T14:56:55.528811+00:00
+position_column: doing
+position_ordinal: '80'
 title: Add tests for @Operation macro's unrecognized-syntax-shape fallback branches
 ---
 Sources/OperationsMacros/OperationsMacros.swift:76, 83-88, 179, 293, 431
