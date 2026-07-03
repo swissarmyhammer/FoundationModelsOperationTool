@@ -151,7 +151,12 @@ extension OperationResolver {
     /// - Returns: The rebuilt, canonically-keyed payload plus any missing
     ///   required parameter names.
     internal func resolveParameters(_ content: GeneratedContent, matching parameters: [ParamMeta]) -> ParameterResolution {
-        let rawProperties = Self.structureProperties(of: content)
+        let rawProperties: [String: GeneratedContent]
+        if case let .structure(properties, _) = content.kind {
+            rawProperties = properties
+        } else {
+            rawProperties = [:]
+        }
         var normalizedIndex: [String: String] = [:]
         for rawKey in rawProperties.keys where normalizedIndex[OperationKeys.normalized(rawKey)] == nil {
             normalizedIndex[OperationKeys.normalized(rawKey)] = rawKey
@@ -194,12 +199,5 @@ extension OperationResolver {
             return key
         }
         return parameter.aliases.lazy.compactMap { normalizedIndex[OperationKeys.normalized($0)] }.first
-    }
-
-    /// `content`'s top-level properties, or an empty dictionary if `content`
-    /// isn't a `.structure` (e.g. the model sent a bare scalar).
-    private static func structureProperties(of content: GeneratedContent) -> [String: GeneratedContent] {
-        guard case let .structure(properties, _) = content.kind else { return [:] }
-        return properties
     }
 }

@@ -540,7 +540,7 @@ private func arrayArgumentText(key: String, values: [String]) -> String {
 /// One nested `Command` property: everything `commandFieldDeclarationText(_:)`
 /// and `payloadAssignmentText(_:)` need to declare its `@Flag`/`@Option` and
 /// fold its parsed value into `operationPayload()`'s payload.
-private struct CommandFieldSpec {
+fileprivate struct CommandFieldSpec {
     /// The parameter's name, shared with its `ParamMeta` entry's `name`.
     fileprivate let name: String
 
@@ -573,7 +573,7 @@ private struct CommandFieldSpec {
 /// description/`@OperationParam` extraction a single code path instead of
 /// two copies that could drift — and avoids diagnosing the same invalid
 /// property twice.
-private struct OperationParameterEntry {
+fileprivate struct OperationParameterEntry {
     /// The synthesized `ParamMeta(...)` call-expression source text.
     fileprivate let paramMetaText: String
 

@@ -128,7 +128,7 @@ public enum SchemaFusion {
 /// collection of these always produces the same result regardless of the
 /// input collection's own (possibly randomized, e.g. `Dictionary.values`)
 /// iteration order.
-private struct FirstSeenField {
+fileprivate struct FirstSeenField {
     /// The index, in `operations` order, of the first operation to declare
     /// this parameter name.
     fileprivate let opIndex: Int
