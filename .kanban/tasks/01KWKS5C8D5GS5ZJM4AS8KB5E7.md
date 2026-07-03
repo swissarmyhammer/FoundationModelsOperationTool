@@ -11,8 +11,8 @@ comments:
 
     Leaving task in doing for /review.
   timestamp: 2026-07-03T10:52:32.844318+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8980'
 title: Add test for NotesError.description
 ---
 Examples/NotesTool/Sources/NotesToolCore/NotesError.swift:18-23

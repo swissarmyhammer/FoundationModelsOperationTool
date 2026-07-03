@@ -224,4 +224,18 @@ private struct FixtureOperation: OperationDefinition {
             Issue.record("unexpected error type: \(error)")
         }
     }
+
+    // MARK: - OperationError.description
+
+    @Test func operationErrorDecodingFailedDescriptionReturnsParameterParsingMessage() {
+        #expect(OperationError.decodingFailed.description == "Could not parse the given parameter values for this operation.")
+    }
+
+    @Test func operationErrorEncodingFailedDescriptionReturnsResultEncodingMessage() {
+        #expect(OperationError.encodingFailed.description == "Could not encode this operation's result.")
+    }
+
+    @Test func operationErrorExecutionFailedDescriptionReturnsExecutionFailureMessage() {
+        #expect(OperationError.executionFailed.description == "This operation failed while executing.")
+    }
 }
