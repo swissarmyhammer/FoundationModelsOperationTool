@@ -1,3 +1,5 @@
+import Darwin
+import Foundation
 import FoundationModels
 import Testing
 
@@ -278,6 +280,60 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
         // `JSONEncoder`'s synthesized encoding for an `Optional` property
         // omits the key entirely when `nil`, rather than writing `null`.
         #expect(result.output.contains("reasonCode") == false)
+    }
+}
+
+// MARK: - Fallback leaf direct invocation (bypassing `OperationCLIDriver`)
+
+/// Captures everything written to the process's real standard output file
+/// descriptor while `body` runs.
+///
+/// `FallbackOperationCommand.run()` (like the macro-generated `Command.run()`
+/// it mirrors) communicates its result purely via a hardcoded top-level
+/// `print(...)` call — there's no injectable output stream to substitute for
+/// a test double, so the only way to observe it is redirecting the real fd 1
+/// a `print` call ultimately writes to, exactly as `AssertExecuteCommand` in
+/// swift-argument-parser's own test helpers does via a subprocess `Pipe`.
+/// This does it in-process instead, since `FallbackOperationCommand` is an
+/// internal type with no standalone executable to spawn.
+private func captureStandardOutput(_ body: () async throws -> Void) async throws -> String {
+    let pipe = Pipe()
+    let savedStdoutFD = dup(FileHandle.standardOutput.fileDescriptor)
+    fflush(stdout)
+    dup2(pipe.fileHandleForWriting.fileDescriptor, FileHandle.standardOutput.fileDescriptor)
+
+    func restoreStandardOutput() {
+        fflush(stdout)
+        dup2(savedStdoutFD, FileHandle.standardOutput.fileDescriptor)
+        close(savedStdoutFD)
+        try? pipe.fileHandleForWriting.close()
+    }
+
+    do {
+        try await body()
+    } catch {
+        restoreStandardOutput()
+        throw error
+    }
+
+    restoreStandardOutput()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    try? pipe.fileHandleForReading.close()
+    return String(data: data, encoding: .utf8) ?? ""
+}
+
+@Suite struct FallbackOperationCommandRunTests {
+
+    @Test func runPrintsTheSameJSONOperationPayloadWouldProduce() async throws {
+        var command = FallbackOperationCommand<ArchiveNoteCLIFixture>()
+        command.rawArguments = ["--id", "note-1", "--reasonCode", "42"]
+        let expectedJSON = command.operationPayload().jsonString
+
+        let output = try await captureStandardOutput {
+            try await command.run()
+        }
+
+        #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == expectedJSON)
     }
 }
 
