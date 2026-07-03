@@ -91,6 +91,52 @@ private struct DeleteNoteToolFixture: OperationDefinition {
     }
 }
 
+/// JSON-encodable result produced by `DecodingFailureToolFixture.execute(in:)`.
+/// Never actually reached — `init(_:)` always throws first — but required to
+/// satisfy `OperationDefinition.Output`.
+private struct DecodingFailureOutput: Encodable, Sendable, Equatable {
+    let title: String
+}
+
+/// Thrown unconditionally by `DecodingFailureToolFixture.init(_:)`, standing
+/// in for a real decode failure (e.g. a value that fails a `Generable`
+/// type's own validation).
+private struct FixtureDecodingError: Error {}
+
+/// `fail decode` fixture: a required `title` the resolver can always find
+/// (so `resolveParameters` reports no missing parameters), but whose
+/// `init(_:)` unconditionally throws — exercising `AnyOperation.run`'s
+/// `OperationError.decodingFailed` path independent of parameter presence.
+private struct DecodingFailureToolFixture: OperationDefinition {
+    typealias Context = ToolFixtureContext
+    typealias Output = DecodingFailureOutput
+
+    var title: String
+
+    static let verb = "fail"
+    static let noun = "decode"
+    static let operationDescription = "Always fails to decode its resolved payload"
+    static let parameterMetadata: [ParamMeta] = [
+        ParamMeta(name: "title", type: .string, required: true, description: "Present but never read")
+    ]
+
+    static var generationSchema: GenerationSchema {
+        GenerationSchema(type: DecodingFailureToolFixture.self, description: operationDescription, properties: [])
+    }
+
+    init(_ content: GeneratedContent) throws {
+        throw FixtureDecodingError()
+    }
+
+    var generatedContent: GeneratedContent {
+        GeneratedContent(properties: ["title": title])
+    }
+
+    func execute(in context: ToolFixtureContext) async throws -> DecodingFailureOutput {
+        DecodingFailureOutput(title: title)
+    }
+}
+
 @Suite struct OperationToolTests {
 
     private func makeTool(
@@ -214,6 +260,28 @@ private struct DeleteNoteToolFixture: OperationDefinition {
         let message = try await tool.call(arguments: arguments)
 
         #expect(message.contains("title"))
+    }
+
+    // MARK: - decodingFailed: returned, not thrown
+
+    @Test func decodingFailedFromOperationInitReturnsCorrectiveMessageInsteadOfThrowing() async throws {
+        // `DecodingFailureToolFixture` declares a required `title` the
+        // resolver can always find, so `resolution.missingRequired` is
+        // empty and dispatch reaches `operation.run` — but its `init(_:)`
+        // unconditionally throws, so `AnyOperation.run` throws
+        // `OperationError.decodingFailed`, distinct from the
+        // missing-required-parameter path above.
+        let tool = try OperationTool(
+            name: "notes",
+            description: "Note operations",
+            context: ToolFixtureContext(),
+            operations: [AnyOperation(DecodingFailureToolFixture.self)]
+        )
+        let arguments = GeneratedContent(properties: ["op": "fail decode", "title": "Groceries"])
+
+        let message = try await tool.call(arguments: arguments)
+
+        #expect(message == OperationError.decodingFailed.description)
     }
 
     // MARK: - Key-alias normalization
