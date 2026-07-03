@@ -426,6 +426,29 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     }
 }
 
+// MARK: - Per-tool operation validation
+
+@Suite struct CLIDriverOperationValidationTests {
+
+    @Test func twoOperationsSharingAnOpStringAreRejectedAtInit() throws {
+        let tool = try OperationTool(
+            name: "notes",
+            description: "Note operations",
+            context: NotesFixtureContext(),
+            operations: [AnyOperation(AddNoteCLIFixture.self), AnyOperation(AddNoteCLIFixture.self)]
+        )
+
+        do {
+            _ = try OperationCLIDriver(tool: tool)
+            Issue.record("expected OperationCLIDriverError.duplicateOperation to be thrown")
+        } catch let error as OperationCLIDriverError {
+            #expect(error == .duplicateOperation(tool: "notes", opString: "add note"))
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+    }
+}
+
 // MARK: - Error cases
 
 @Suite struct CLIDriverErrorTests {

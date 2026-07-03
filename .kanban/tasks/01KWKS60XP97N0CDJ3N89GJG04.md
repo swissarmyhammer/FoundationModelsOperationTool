@@ -17,8 +17,8 @@ comments:
 
     Work is done and green. Leaving task in doing for /review.
   timestamp: 2026-07-03T12:36:57.231917+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8f80
 title: Add tests for OperationCLIDriverError.description
 ---
 Sources/OperationsCLI/CLIRegistryBuilder.swift:22-35
