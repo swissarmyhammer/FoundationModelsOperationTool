@@ -2,3 +2,5 @@
 .shell/
 .build/
 .DS_Store
+.swiftpm/
+.validators/

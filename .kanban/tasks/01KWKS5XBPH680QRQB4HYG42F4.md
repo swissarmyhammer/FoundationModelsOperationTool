@@ -9,8 +9,8 @@ comments:
 
     Leaving task in doing for /review.
   timestamp: 2026-07-03T12:27:53.155163+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8e80'
 title: Add test for SchemaFusion's .number (Double) type mapping
 ---
 Sources/Operations/SchemaFusion.swift:161-174 (specifically line 168)

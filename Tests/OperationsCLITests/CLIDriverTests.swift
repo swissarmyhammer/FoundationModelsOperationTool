@@ -466,3 +466,34 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
         #expect(result.output.contains("priority"))
     }
 }
+
+// MARK: - `OperationCLIDriverError.description`
+
+@Suite struct OperationCLIDriverErrorDescriptionTests {
+
+    @Test func duplicateToolNameDescribesTheOffendingName() {
+        let error = OperationCLIDriverError.duplicateToolName("x")
+
+        #expect(
+            error.description
+                == "duplicate tool name 'x': every tool passed to OperationCLIDriver must have a unique name"
+        )
+    }
+
+    @Test func emptyToolDescribesTheOffendingName() {
+        let error = OperationCLIDriverError.emptyTool("x")
+
+        #expect(
+            error.description == "tool 'x' has no operations: OperationCLIDriver requires at least one operation per tool"
+        )
+    }
+
+    @Test func duplicateOperationDescribesTheToolAndOperation() {
+        let error = OperationCLIDriverError.duplicateOperation(tool: "x", opString: "y")
+
+        #expect(
+            error.description
+                == "tool 'x' declares 'y' more than once: every operation's verb/noun pair must be unique within a tool"
+        )
+    }
+}
