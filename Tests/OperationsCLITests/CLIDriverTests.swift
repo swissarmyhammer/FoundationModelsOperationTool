@@ -76,28 +76,35 @@ extension DeleteNoteCLIFixture {
 private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
     let id: String
     let reasonCode: Int?
+    let confirmed: Bool
 }
 
 /// `archive note` fixture: a hand-conformed `OperationDefinition` — no
 /// `@Operation`/`@Generable` macro involved, mirroring the manual escape
 /// hatch — under the *same* "note" noun as the macro-generated leaves above,
 /// so `NounNode`'s subcommands list mixes a macro leaf and a synthesized
-/// `FallbackOperationCommand` leaf. Its optional `reasonCode` exercises the
-/// fallback leaf's integer parsing (`FallbackPayloadBuilder`'s
-/// `.integer` conversion), not just its string handling.
+/// `FallbackOperationCommand` leaf. Its optional `reasonCode` (declared with
+/// a `-r` short flag) exercises the fallback leaf's integer parsing and
+/// short-flag/inline-equals spellings, and its `confirmed` boolean exercises
+/// the fallback leaf's flag-presence detection — all only reachable through
+/// `FallbackPayloadBuilder`, never a macro-generated `@Option`/`@Flag`.
 private struct ArchiveNoteCLIFixture: OperationDefinition {
     typealias Context = NotesFixtureContext
     typealias Output = ArchiveNoteCLIOutput
 
     var id: String
     var reasonCode: Int?
+    var confirmed: Bool
 
     static let verb = "archive"
     static let noun = "note"
     static let operationDescription = "Archive a note"
     static let parameterMetadata: [ParamMeta] = [
         ParamMeta(name: "id", type: .string, required: true, description: "The note id"),
-        ParamMeta(name: "reasonCode", type: .integer, required: false, description: "Why the note was archived"),
+        ParamMeta(
+            name: "reasonCode", type: .integer, required: false, description: "Why the note was archived", short: "r"
+        ),
+        ParamMeta(name: "confirmed", type: .boolean, required: true, description: "Whether the archive was confirmed"),
     ]
 
     static var generationSchema: GenerationSchema {
@@ -107,14 +114,19 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
     init(_ content: GeneratedContent) throws {
         id = try content.value(String.self, forProperty: "id")
         reasonCode = try content.value(Int?.self, forProperty: "reasonCode")
+        confirmed = try content.value(Bool.self, forProperty: "confirmed")
     }
 
     var generatedContent: GeneratedContent {
-        GeneratedContent(properties: ["id": id])
+        var properties: [(String, any ConvertibleToGeneratedContent)] = [("id", id), ("confirmed", confirmed)]
+        if let reasonCode {
+            properties.append(("reasonCode", reasonCode))
+        }
+        return GeneratedContent(properties: properties, uniquingKeysWith: { _, new in new })
     }
 
     func execute(in context: NotesFixtureContext) async throws -> ArchiveNoteCLIOutput {
-        ArchiveNoteCLIOutput(id: id, reasonCode: reasonCode)
+        ArchiveNoteCLIOutput(id: id, reasonCode: reasonCode, confirmed: confirmed)
     }
 }
 
@@ -280,6 +292,42 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
         // `JSONEncoder`'s synthesized encoding for an `Optional` property
         // omits the key entirely when `nil`, rather than writing `null`.
         #expect(result.output.contains("reasonCode") == false)
+    }
+
+    @Test func fallbackLeafBooleanFlagPresenceSetsTheFieldTrue() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1", "--confirmed"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"confirmed\":true"))
+    }
+
+    @Test func fallbackLeafBooleanFlagAbsenceLeavesTheFieldFalse() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"confirmed\":false"))
+    }
+
+    @Test func fallbackLeafAcceptsTheInlineEqualsFormForAScalarParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1", "--reasonCode=42"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"reasonCode\":42"))
+    }
+
+    @Test func fallbackLeafAcceptsAShortFlagSpellingWithAValue() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1", "-r", "42"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"reasonCode\":42"))
     }
 }
 

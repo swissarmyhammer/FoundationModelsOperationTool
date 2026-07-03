@@ -1,6 +1,24 @@
 ---
-position_column: todo
-position_ordinal: '8980'
+comments:
+- actor: wballard
+  id: 01kwm3e2pjvxwgh0n9xw18y3d1
+  text: |-
+    Implemented: extended the existing macro-less `ArchiveNoteCLIFixture` fixture in Tests/OperationsCLITests/CLIDriverTests.swift (used by CLIDriverFallbackLeafTests) rather than adding a new fixture — `reasonCode`'s ParamMeta gained `short: "r"`, and a new required `confirmed: Bool` parameter (ParamMeta type `.boolean`) was added, with ArchiveNoteCLIOutput/init(_:)/generatedContent/execute(in:) updated to match.
+
+    Added 4 new @Test functions to CLIDriverFallbackLeafTests, each mapped to a previously-uncovered line in FallbackOperationCommand.swift:
+    - fallbackLeafBooleanFlagPresenceSetsTheFieldTrue (`--confirmed` presence -> `collected.flags.insert`)
+    - fallbackLeafBooleanFlagAbsenceLeavesTheFieldFalse (absence -> convertedValue's `.boolean` branch returning false)
+    - fallbackLeafAcceptsTheInlineEqualsFormForAScalarParameter (`--reasonCode=42` -> splitInlineValue)
+    - fallbackLeafAcceptsAShortFlagSpellingWithAValue (`-r 42` -> flagNameIndex's short-flag branch)
+
+    Self-review via /review found one finding: the hand-written ArchiveNoteCLIFixture.generatedContent (unused elsewhere in the codebase — dead code required only by Generable conformance) only emitted `id`, so init(_:) <-> generatedContent wasn't a true round trip. This predated my change for `reasonCode` but I was extending the same gap with `confirmed`, so I fixed generatedContent to include reasonCode (conditionally) and confirmed, matching FallbackPayloadBuilder's own tuple-array style. Re-ran /review after: zero findings.
+
+    Verification: `swift build` clean (zero warnings), `swift test` all green (72+30+36+22 tests across 4 test-run batches, zero failures). Production code Sources/OperationsCLI/FallbackOperationCommand.swift has zero diff — confirmed via git status. Adversarial double-check agent independently verified build/test green, line-to-test mapping, and fixture consistency: verdict PASS, no findings.
+
+    Leaving task in `doing` for /review per the implement skill (not moving to review myself).
+  timestamp: 2026-07-03T13:42:03.730293+00:00
+position_column: doing
+position_ordinal: '80'
 title: Add tests for FallbackPayloadBuilder's boolean flags, inline =value, and short-flag argument parsing
 ---
 Sources/OperationsCLI/FallbackOperationCommand.swift:106-147

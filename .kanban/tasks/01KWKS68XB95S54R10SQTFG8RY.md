@@ -15,8 +15,8 @@ comments:
 
     Leaving task in doing per /implement's process — ready for /review.
   timestamp: 2026-07-03T13:15:11.690610+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9180'
 title: Add test for FallbackOperationCommand.run()'s direct-invocation print behavior
 ---
 Sources/OperationsCLI/FallbackOperationCommand.swift:50-52
