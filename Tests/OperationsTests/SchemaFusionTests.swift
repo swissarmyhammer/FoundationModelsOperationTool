@@ -96,6 +96,33 @@ private struct FixtureDeleteNote: OperationDefinition {
     }
 }
 
+/// `rate item` fixture: a required `score`, exercising the `.number`
+/// (`Double`) `ParamType` case — otherwise unexercised by any other fixture
+/// in this file.
+private struct FixtureRateItem: OperationDefinition {
+    typealias Context = FusionFixtureContext
+    typealias Output = FusionFixtureOutput
+
+    static let verb = "rate"
+    static let noun = "item"
+    static let operationDescription = "Rate an item"
+    static let parameterMetadata: [ParamMeta] = [
+        ParamMeta(name: "score", type: .number, required: true, description: "The rating, as a fractional score")
+    ]
+
+    static var generationSchema: GenerationSchema {
+        GenerationSchema(type: FixtureRateItem.self, description: operationDescription, properties: [])
+    }
+
+    init(_ content: GeneratedContent) throws {}
+
+    var generatedContent: GeneratedContent { GeneratedContent(properties: [:]) }
+
+    func execute(in context: FusionFixtureContext) async throws -> FusionFixtureOutput {
+        FusionFixtureOutput()
+    }
+}
+
 /// A fixture operation that illegally declares a parameter literally named
 /// `"op"`, proving fusion rejects the collision with a descriptive error.
 private struct FixtureReservedOpLiteral: OperationDefinition {
@@ -231,6 +258,20 @@ private struct FixtureReservedOpNormalized: OperationDefinition {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         #expect(try encoder.encode(first) == encoder.encode(second))
+    }
+
+    // MARK: - field types
+
+    /// Exercises `dynamicSchema(for:)`'s `.number` case
+    /// (`DynamicGenerationSchema(type: Double.self)`), otherwise untouched by
+    /// any other fixture in this file: the fused schema must render a
+    /// `Double`-typed field as a JSON Schema `number`.
+    @Test func numberParameterIsRenderedAsNumberType() throws {
+        let object = try fusedJSONObject([AnyOperation(FixtureRateItem.self)])
+        let properties = try #require(object["properties"] as? [String: Any])
+        let scoreSchema = try #require(properties["score"] as? [String: Any])
+
+        #expect(scoreSchema["type"] as? String == "number")
     }
 
     // MARK: - reserved `op` parameter name
