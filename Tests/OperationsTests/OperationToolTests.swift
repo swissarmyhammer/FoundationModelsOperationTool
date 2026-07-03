@@ -295,6 +295,15 @@ private struct DecodingFailureToolFixture: OperationDefinition, Sendable {
         #expect(json.contains("\"title\":\"Groceries\""))
     }
 
+    @Test func keyAliasResolvesLabelsAliasToTagsCanonicalName() async throws {
+        let tool = try makeTool()
+        let arguments = GeneratedContent(properties: ["op": "add note", "title": "Groceries", "labels": ["errands"]])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"tags\":[\"errands\"]"))
+    }
+
     @Test func keyAliasCamelSnakeNormalizationResolvesUnaliasedParameter() async throws {
         let tool = try makeTool()
         let arguments = GeneratedContent(properties: ["op": "add note", "title": "Groceries", "author_name": "Ann"])
@@ -313,6 +322,20 @@ private struct DecodingFailureToolFixture: OperationDefinition, Sendable {
         let json = try await tool.call(arguments: arguments)
 
         #expect(json.contains("\"title\":\"Canonical\""))
+    }
+
+    @Test func explicitCanonicalKeyIsNeverOverriddenByANormalizedKeyMatch() async throws {
+        let tool = try makeTool()
+        // Both the canonical "authorName" and its snake_case normalized
+        // form "author_name" (an unaliased normalization match, not a
+        // declared alias) are present; the canonical value must win.
+        let arguments = GeneratedContent(properties: [
+            "op": "add note", "title": "Groceries", "authorName": "Canonical", "author_name": "Normalized",
+        ])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"authorName\":\"Canonical\""))
     }
 
     // MARK: - Inference hook

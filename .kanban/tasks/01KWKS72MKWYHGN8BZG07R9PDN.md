@@ -16,8 +16,8 @@ comments:
 
     Leaving task in `doing` per process — not moving to review myself.
   timestamp: 2026-07-03T14:56:55.528811+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9580'
 title: Add tests for @Operation macro's unrecognized-syntax-shape fallback branches
 ---
 Sources/OperationsMacros/OperationsMacros.swift:76, 83-88, 179, 293, 431
@@ -33,3 +33,12 @@ Several "recognizer returns nil/[] for an unrecognized syntax shape" branches ar
 - Line 431 — `OperationMacro.expansion` returns `[]` when `node.arguments` isn't `.argumentList` at all. Likely defensive/hard to construct via real Swift source (valid `@Operation(...)` invocations always produce `.argumentList`) — lower priority than the others; investigate whether it's reachable before writing a test.
 
 Add `assertMacroExpansion`/diagnostic-fixture tests for each reachable branch (76, 83-88, 179, 293); confirm whether 431 is reachable through normal source before deciding whether to test or leave as defensive/unreachable.
+
+## Review Findings (2026-07-03 09:59)
+
+- [ ] `Tests/OperationsMacrosTests/OperationMacroTests.swift:164` — The test covers Int and Double numeric types but not Float, which is explicitly listed as supported in the macro's error messages. All supported numeric types should be verified symmetrically. Add a Float (or Float?) parameter to verify it is handled with the same type classification as Double and Int.
+- [ ] `Tests/OperationsMacrosTests/OperationMacroTests.swift:1282` — The test verifies that non-literal verb arguments are embedded verbatim without a diagnostic. The macro's handling of non-literal noun arguments is likely symmetric; the test should verify that case to ensure the invariant holds at both sites. Add a companion test or extend this test to also verify that non-literal noun arguments receive the same treatment — e.g., using `noun: "\(dynamicNoun)"` and confirming the expansion includes `static let noun: String = "\(dynamicNoun)"`.
+
+## Review Findings (2026-07-03 15:14)
+
+Retracted 2026-07-03: both findings recorded in the 09:59 pass above (`OperationMacroTests.swift:164` re Float coverage, and `:1282` re non-literal noun coverage) targeted pre-existing test code not touched by this task's commit 7df9fa3. Verified via `git show 7df9fa3 -- Tests/OperationsMacrosTests/OperationMacroTests.swift | grep -n "^@@"`, which reports four hunks with new-file ranges 271-333, 470-537, 830-899, and 1006-1067. Line 164 falls before the first hunk and line 1282 falls after the last hunk — neither is within any hunk this commit touched. The "never refactor existing tests" exception should have applied and dropped both; recorded in error above, now removed. No other findings from that pass. No in-scope findings remain for this checkpoint delta.
