@@ -22,8 +22,8 @@ comments:
 
     Leaving task in `doing` for review per /implement convention.
   timestamp: 2026-07-03T14:20:17.134263+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9380'
 title: Add tests for FallbackPayloadBuilder's number and array parameter conversion
 ---
 Sources/OperationsCLI/FallbackOperationCommand.swift:160-212

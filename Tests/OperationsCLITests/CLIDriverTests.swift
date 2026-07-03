@@ -557,6 +557,35 @@ private func captureStandardOutput(_ body: () async throws -> Void) async throws
     }
 }
 
+// MARK: - Bare root (`runNonOperationCommand`'s async branch)
+
+@Suite struct CLIDriverBareRootTests {
+
+    @Test func noArgumentsAtAllShowsRootHelpWithASuccessExitCode() async throws {
+        let driver = try makeSingleToolDriver()
+
+        // No arguments at all: `RootCommand` itself (an `AsyncParsableCommand`,
+        // not an `OperationCommand`) is the value `asyncParseAsRoot` returns —
+        // no subcommand was consumed, so parsing stops there rather than
+        // descending into `note`. That drives `dispatch(command:)` to
+        // `runNonOperationCommand`'s `if var asyncCommand = mutableCommand as?
+        // AsyncParsableCommand` branch, exercising the async `run()` call.
+        // `RootCommand`'s default `run()` (inherited from `ParsableCommand`,
+        // since ArgumentParser's `AsyncParsableCommand` has no separate
+        // default) unconditionally throws `CleanExit.helpRequest(self)`, so
+        // this still lands in `runNonOperationCommand`'s `catch`, not its
+        // `CLIResult(output: "", exitCode: 0)` success return — but it is the
+        // only way to reach the async branch at all, since every other
+        // non-`OperationCommand` node in the tree (`NounNode`/`ToolNode`/
+        // ArgumentParser's built-in `HelpCommand`) is a synchronous
+        // `ParsableCommand`, not `AsyncParsableCommand`.
+        let result = await driver.run(arguments: [])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("note"))
+    }
+}
+
 // MARK: - `--generate-completion-script`
 
 @Suite struct CLIDriverCompletionTests {
