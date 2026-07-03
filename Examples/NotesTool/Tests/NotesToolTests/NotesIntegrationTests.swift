@@ -129,6 +129,19 @@ import Testing
     }
 }
 
+/// Exercises `NotesError` directly, independent of dispatch — the
+/// `NotesDispatchIntegrationTests` "unknown id" tests above only assert the
+/// error surfaces as `OperationError.executionFailed`, never reading
+/// `NotesError`'s own `CustomStringConvertible.description`.
+@Suite struct NotesErrorTests {
+
+    @Test func notFoundDescriptionNamesTheMissingID() {
+        let error = NotesError.notFound(id: "abc")
+
+        #expect(error.description == "No note found with id 'abc'.")
+    }
+}
+
 /// Exercises every notes operation through `OperationCLIDriver`, proving the
 /// macro-generated `Command` leaves converge on the identical dispatch path
 /// the model-facing tests above exercise directly.
