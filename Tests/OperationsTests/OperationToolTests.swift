@@ -397,4 +397,47 @@ private struct DeleteNoteToolFixture: OperationDefinition {
 
         #expect(matched == "add_the_note")
     }
+
+    // MARK: - resolveParameters: non-structure top-level content
+    //
+    // Every dispatch test above supplies a top-level structure payload
+    // (`GeneratedContent(properties:)`), so `resolveParameters`'s
+    // `.structure`-vs-else branch (it's `internal`, reachable via
+    // `@testable import`) only ever sees the `.structure` side there. These
+    // exercise the `else` side directly: a top-level `GeneratedContent`
+    // whose `kind` is a bare scalar or a top-level array, rather than an
+    // object. Resolution must degrade gracefully — treating the payload as
+    // having no properties at all, so every required parameter comes back
+    // missing — rather than crash.
+
+    @Test func resolveParametersOnATopLevelScalarStringReportsEveryRequiredParameterMissing() {
+        let resolver = OperationResolver()
+        let parameters: [ParamMeta] = [
+            ParamMeta(name: "title", type: .string, required: true, description: "The note title"),
+            ParamMeta(name: "tags", type: .array(of: .string), required: false, description: "Tags to attach"),
+        ]
+        let content = GeneratedContent(kind: .string("just a string, not an object"))
+
+        let resolution = resolver.resolveParameters(content, matching: parameters)
+
+        #expect(resolution.missingRequired == ["title"])
+        #expect(resolution.content == GeneratedContent(kind: .structure(properties: [:], orderedKeys: [])))
+    }
+
+    @Test func resolveParametersOnATopLevelArrayReportsEveryRequiredParameterMissing() {
+        let resolver = OperationResolver()
+        let parameters: [ParamMeta] = [
+            ParamMeta(name: "title", type: .string, required: true, description: "The note title"),
+            ParamMeta(name: "tags", type: .array(of: .string), required: false, description: "Tags to attach"),
+        ]
+        let content = GeneratedContent(kind: .array([
+            GeneratedContent(kind: .string("first")),
+            GeneratedContent(kind: .string("second")),
+        ]))
+
+        let resolution = resolver.resolveParameters(content, matching: parameters)
+
+        #expect(resolution.missingRequired == ["title"])
+        #expect(resolution.content == GeneratedContent(kind: .structure(properties: [:], orderedKeys: [])))
+    }
 }

@@ -28,8 +28,8 @@ comments:
 
     Checked off both checklist items in the task description. Leaving task in doing for /review.
   timestamp: 2026-07-03T11:34:58.717418+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8b80
 title: Add test for OperationResolver.matchOpString's non-two-token fallback path
 ---
 Sources/Operations/OperationResolver.swift:93-97
