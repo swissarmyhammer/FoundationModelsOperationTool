@@ -77,4 +77,23 @@ extension AddNoteFixture {
 
         #expect(json == "{\"tagCount\":2,\"title\":\"Groceries\"}")
     }
+
+    // MARK: - CLI-facing metadata
+
+    @Test func macroSynthesizedConformanceCapturesItsDefinitionType() {
+        let anyOp = AnyOperation(AddNoteFixture.self)
+
+        #expect(ObjectIdentifier(anyOp.definitionType) == ObjectIdentifier(AddNoteFixture.self))
+    }
+
+    @Test func macroSynthesizedConformanceExposesItsGeneratedCommandType() throws {
+        let anyOp = AnyOperation(AddNoteFixture.self)
+        let commandType = try #require(anyOp.commandType)
+
+        #expect(ObjectIdentifier(commandType) == ObjectIdentifier(AddNoteFixture.Command.self))
+    }
+
+    @Test func macroSynthesizedCLICommandTypealiasMatchesTheNestedCommand() {
+        #expect(ObjectIdentifier(AddNoteFixture.CLICommand.self) == ObjectIdentifier(AddNoteFixture.Command.self))
+    }
 }

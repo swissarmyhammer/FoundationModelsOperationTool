@@ -1,0 +1,468 @@
+import FoundationModels
+import Testing
+
+@testable import Operations
+@testable import OperationsCLI
+
+// MARK: - Fixtures
+
+/// Shared `Context` for the macro-generated "notes" tool fixtures below.
+private struct NotesFixtureContext: Sendable {}
+
+/// JSON-encodable result produced by `AddNoteCLIFixture.execute(in:)`.
+private struct AddNoteCLIOutput: Encodable, Sendable, Equatable {
+    let title: String
+    let tags: [String]
+    let pinned: Bool
+    let urgent: Bool
+    let priority: Int?
+}
+
+/// `add note` fixture: a required `title` (short `-t`), an optional `tags`
+/// array (repeated-option coverage), two boolean flags with short names
+/// (`-p`/`-u`, combined-short-flag coverage), and an optional `priority`
+/// (bad-int-error coverage).
+@Generable
+@Operation(verb: "add", noun: "note", description: "Add a note")
+private struct AddNoteCLIFixture {
+    @Guide(description: "The note title")
+    @OperationParam(short: "t")
+    var title: String
+
+    @Guide(description: "Tags to attach")
+    var tags: [String]?
+
+    @Guide(description: "Whether the note is pinned")
+    @OperationParam(short: "p")
+    var pinned: Bool
+
+    @Guide(description: "Whether the note is urgent")
+    @OperationParam(short: "u")
+    var urgent: Bool
+
+    @Guide(description: "The note's priority")
+    var priority: Int?
+}
+
+extension AddNoteCLIFixture {
+    func execute(in context: NotesFixtureContext) async throws -> AddNoteCLIOutput {
+        AddNoteCLIOutput(title: title, tags: tags ?? [], pinned: pinned, urgent: urgent, priority: priority)
+    }
+}
+
+/// JSON-encodable result produced by `DeleteNoteCLIFixture.execute(in:)`.
+private struct DeleteNoteCLIOutput: Encodable, Sendable, Equatable {
+    let id: String
+}
+
+/// `delete note` fixture: a second macro-generated verb under the "note"
+/// noun, so `NounNode`'s subcommands list has more than one macro leaf.
+@Generable
+@Operation(verb: "delete", noun: "note", description: "Delete a note")
+private struct DeleteNoteCLIFixture {
+    @Guide(description: "The note id")
+    var id: String
+}
+
+extension DeleteNoteCLIFixture {
+    func execute(in context: NotesFixtureContext) async throws -> DeleteNoteCLIOutput {
+        DeleteNoteCLIOutput(id: id)
+    }
+}
+
+/// JSON-encodable result produced by `ArchiveNoteCLIFixture.execute(in:)`.
+private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
+    let id: String
+    let reasonCode: Int?
+}
+
+/// `archive note` fixture: a hand-conformed `OperationDefinition` — no
+/// `@Operation`/`@Generable` macro involved, mirroring the manual escape
+/// hatch — under the *same* "note" noun as the macro-generated leaves above,
+/// so `NounNode`'s subcommands list mixes a macro leaf and a synthesized
+/// `FallbackOperationCommand` leaf. Its optional `reasonCode` exercises the
+/// fallback leaf's integer parsing (`FallbackPayloadBuilder`'s
+/// `.integer` conversion), not just its string handling.
+private struct ArchiveNoteCLIFixture: OperationDefinition {
+    typealias Context = NotesFixtureContext
+    typealias Output = ArchiveNoteCLIOutput
+
+    var id: String
+    var reasonCode: Int?
+
+    static let verb = "archive"
+    static let noun = "note"
+    static let operationDescription = "Archive a note"
+    static let parameterMetadata: [ParamMeta] = [
+        ParamMeta(name: "id", type: .string, required: true, description: "The note id"),
+        ParamMeta(name: "reasonCode", type: .integer, required: false, description: "Why the note was archived"),
+    ]
+
+    static var generationSchema: GenerationSchema {
+        GenerationSchema(type: ArchiveNoteCLIFixture.self, description: operationDescription, properties: [])
+    }
+
+    init(_ content: GeneratedContent) throws {
+        id = try content.value(String.self, forProperty: "id")
+        reasonCode = try content.value(Int?.self, forProperty: "reasonCode")
+    }
+
+    var generatedContent: GeneratedContent {
+        GeneratedContent(properties: ["id": id])
+    }
+
+    func execute(in context: NotesFixtureContext) async throws -> ArchiveNoteCLIOutput {
+        ArchiveNoteCLIOutput(id: id, reasonCode: reasonCode)
+    }
+}
+
+/// Shared `Context` for the "tasks" tool fixture below (multi-tool tests).
+private struct TasksFixtureContext: Sendable {}
+
+/// JSON-encodable result produced by `AddTaskCLIFixture.execute(in:)`.
+private struct AddTaskCLIOutput: Encodable, Sendable, Equatable {
+    let title: String
+}
+
+/// `add task` fixture: a second tool's single operation, for multi-tool
+/// grammar tests (`<executable> <tool> <noun> <verb>`).
+@Generable
+@Operation(verb: "add", noun: "task", description: "Add a task")
+private struct AddTaskCLIFixture {
+    @Guide(description: "The task title")
+    var title: String
+}
+
+extension AddTaskCLIFixture {
+    func execute(in context: TasksFixtureContext) async throws -> AddTaskCLIOutput {
+        AddTaskCLIOutput(title: title)
+    }
+}
+
+/// Builds the "notes" tool: two macro-generated leaves and one macro-less
+/// (fallback) leaf, all under the "note" noun.
+private func makeNotesTool() throws -> OperationTool<NotesFixtureContext> {
+    try OperationTool(
+        name: "notes",
+        description: "Note operations",
+        context: NotesFixtureContext(),
+        operations: [
+            AnyOperation(AddNoteCLIFixture.self),
+            AnyOperation(DeleteNoteCLIFixture.self),
+            AnyOperation(ArchiveNoteCLIFixture.self),
+        ]
+    )
+}
+
+/// Builds the "tasks" tool: a single macro-generated leaf under the "task"
+/// noun.
+private func makeTasksTool() throws -> OperationTool<TasksFixtureContext> {
+    try OperationTool(
+        name: "tasks",
+        description: "Task operations",
+        context: TasksFixtureContext(),
+        operations: [AnyOperation(AddTaskCLIFixture.self)]
+    )
+}
+
+/// A single-tool driver: the collapsed `<executable> <noun> <verb>` grammar
+/// (`notes note add …`, per plan.md's acceptance example).
+private func makeSingleToolDriver() throws -> OperationCLIDriver {
+    try OperationCLIDriver(tool: makeNotesTool(), executableName: "notes")
+}
+
+/// A two-tool driver: the `<executable> <tool> <noun> <verb>` grammar.
+private func makeMultiToolDriver() throws -> OperationCLIDriver {
+    try OperationCLIDriver(
+        [AnyOperationTool(try makeNotesTool()), AnyOperationTool(try makeTasksTool())],
+        executableName: "multitool"
+    )
+}
+
+// MARK: - Convergence contract: argv -> payload round-trip
+
+@Suite struct CLIDriverConvergenceTests {
+
+    @Test func executesAddNoteAndPrintsItsJSON() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--title", "Hi", "--tags", "a", "--tags", "b"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"title\":\"Hi\""))
+        #expect(result.output.contains("\"tags\":[\"a\",\"b\"]"))
+    }
+
+    @Test func repeatedOptionValuesAccumulateIntoAnArray() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--title", "Hi", "--tags", "a", "--tags", "b", "--tags", "c"])
+
+        #expect(result.output.contains("\"tags\":[\"a\",\"b\",\"c\"]"))
+    }
+
+    @Test func inlineEqualsValueIsAccepted() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--title=Hi"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"title\":\"Hi\""))
+    }
+
+    @Test func combinedShortFlagsSetBothBooleans() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--title", "Hi", "-pu"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"pinned\":true"))
+        #expect(result.output.contains("\"urgent\":true"))
+    }
+
+    @Test func terminatorDoesNotBreakParsing() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "delete", "--id", "note-1", "--"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"id\":\"note-1\""))
+    }
+}
+
+// MARK: - Macro-less fallback leaf
+
+@Suite struct CLIDriverFallbackLeafTests {
+
+    @Test func fallbackLeafRoundTripsToTheSamePayloadTheResolverAccepts() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "archive", "--id", "note-1"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"id\":\"note-1\""))
+    }
+
+    @Test func fallbackLeafAppearsInNounHelp() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "--help"])
+
+        #expect(result.output.contains("archive"))
+    }
+
+    @Test func fallbackLeafOwnHelpDescribesItsParameters() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "archive", "--help"])
+
+        #expect(result.output.contains("Archive a note"))
+        #expect(result.output.contains("--id"))
+    }
+
+    @Test func fallbackLeafParsesAnIntegerParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "archive", "--id", "note-1", "--reasonCode", "42"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"reasonCode\":42"))
+    }
+
+    @Test func fallbackLeafOmitsAnUnsuppliedOptionalIntegerParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "archive", "--id", "note-1"])
+
+        #expect(result.exitCode == 0)
+        // `JSONEncoder`'s synthesized encoding for an `Optional` property
+        // omits the key entirely when `nil`, rather than writing `null`.
+        #expect(result.output.contains("reasonCode") == false)
+    }
+}
+
+// MARK: - Help snapshots (single tool)
+
+@Suite struct CLIDriverHelpTests {
+
+    @Test func rootHelpListsEveryNoun() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["--help"])
+
+        #expect(result.output.contains("note"))
+    }
+
+    @Test func nounHelpListsEveryVerbWithTheCorrectUsagePrefix() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "--help"])
+
+        #expect(result.output.contains("add"))
+        #expect(result.output.contains("delete"))
+        #expect(result.output.contains("archive"))
+        #expect(result.output.contains("USAGE: notes note <subcommand>"))
+    }
+
+    @Test func verbHelpShowsGuideDescriptionsAndTheCorrectUsagePrefix() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--help"])
+
+        #expect(result.output.contains("The note title"))
+        #expect(result.output.contains("Tags to attach"))
+        #expect(result.output.contains("USAGE: notes note add"))
+    }
+}
+
+// MARK: - `--generate-completion-script`
+
+@Suite struct CLIDriverCompletionTests {
+
+    @Test func completionScriptContainsEveryNounVerbAndFlag() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["--generate-completion-script", "zsh"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("note"))
+        #expect(result.output.contains("add"))
+        #expect(result.output.contains("delete"))
+        #expect(result.output.contains("archive"))
+        #expect(result.output.contains("--title"))
+        #expect(result.output.contains("--tags"))
+    }
+
+    @Test func completionScriptIncludesTheMacroLessFallbackLeafsFlags() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["--generate-completion-script", "zsh"])
+
+        #expect(result.output.contains("archive note: --id"))
+    }
+
+    @Test func inlineEqualsShellFormIsAccepted() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["--generate-completion-script=zsh"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("note"))
+    }
+}
+
+// MARK: - Multi-tool grammar
+
+@Suite struct CLIDriverMultiToolTests {
+
+    @Test func singleToolCollapsesTheToolLevelAway() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--title", "Hi"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"title\":\"Hi\""))
+    }
+
+    @Test func multiToolRequiresTheToolLevelSegment() async throws {
+        let driver = try makeMultiToolDriver()
+
+        let result = await driver.run(["notes", "note", "add", "--title", "Hi"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"title\":\"Hi\""))
+    }
+
+    @Test func multiToolDispatchesTheSecondToolsOperation() async throws {
+        let driver = try makeMultiToolDriver()
+
+        let result = await driver.run(["tasks", "task", "add", "--title", "Groceries"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"title\":\"Groceries\""))
+    }
+
+    @Test func multiToolRootHelpListsEveryToolName() async throws {
+        let driver = try makeMultiToolDriver()
+
+        let result = await driver.run(["--help"])
+
+        #expect(result.output.contains("notes"))
+        #expect(result.output.contains("tasks"))
+    }
+
+    @Test func duplicateToolNamesAreRejectedAtInit() throws {
+        let tool = try makeNotesTool()
+
+        do {
+            _ = try OperationCLIDriver([AnyOperationTool(tool), AnyOperationTool(tool)])
+            Issue.record("expected OperationCLIDriverError.duplicateToolName to be thrown")
+        } catch let error as OperationCLIDriverError {
+            #expect(error == .duplicateToolName("notes"))
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+    }
+
+    @Test func toolNamesDifferingOnlyByCaseAreNotTreatedAsDuplicates() throws {
+        let lowercaseTool = try OperationTool(
+            name: "notes",
+            description: "Note operations",
+            context: NotesFixtureContext(),
+            operations: [AnyOperation(AddNoteCLIFixture.self)]
+        )
+        let uppercaseTool = try OperationTool(
+            name: "Notes",
+            description: "Other note operations",
+            context: NotesFixtureContext(),
+            operations: [AnyOperation(DeleteNoteCLIFixture.self)]
+        )
+
+        // Case-sensitive tool-name matching: "notes" and "Notes" must both
+        // be accepted, not rejected as duplicates. A thrown
+        // `OperationCLIDriverError.duplicateToolName` here would fail this
+        // test by propagating out of the `throws` test function.
+        _ = try OperationCLIDriver([AnyOperationTool(lowercaseTool), AnyOperationTool(uppercaseTool)])
+    }
+}
+
+// MARK: - Error cases
+
+@Suite struct CLIDriverErrorTests {
+
+    @Test func unknownNounReturnsAnErrorWithNonZeroExitCode() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["notanoun", "add"])
+
+        #expect(result.exitCode != 0)
+        #expect(!result.output.isEmpty)
+    }
+
+    @Test func unknownVerbReturnsAnErrorWithNonZeroExitCode() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "notaverb"])
+
+        #expect(result.exitCode != 0)
+        #expect(!result.output.isEmpty)
+    }
+
+    @Test func missingRequiredParameterReturnsAnErrorNamingIt() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add"])
+
+        #expect(result.exitCode != 0)
+        #expect(result.output.contains("title"))
+    }
+
+    @Test func badIntValueReturnsAnErrorNamingTheParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(["note", "add", "--title", "Hi", "--priority", "not-a-number"])
+
+        #expect(result.exitCode != 0)
+        #expect(result.output.contains("priority"))
+    }
+}

@@ -110,6 +110,14 @@ private struct DeleteNoteToolFixture: OperationDefinition {
         )
     }
 
+    // MARK: - Operations exposure (CLI driver assembly)
+
+    @Test func operationsExposesEveryRegisteredOperationInOrder() throws {
+        let tool = try makeTool()
+
+        #expect(tool.operations.map(\.opString) == ["add note", "delete note"])
+    }
+
     // MARK: - Tool conformance
 
     @Test func operationToolCanBeRegisteredOnALanguageModelSession() throws {

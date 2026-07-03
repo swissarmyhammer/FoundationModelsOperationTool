@@ -47,7 +47,15 @@ public struct OperationTool<Context: Sendable>: Tool {
     /// for a many-op fused tool, hence the knob.
     public let includesSchemaInInstructions: Bool
 
-    private let operations: [AnyOperation<Context>]
+    /// Every operation fused into this tool, in the order passed to `init`.
+    ///
+    /// `OperationsCLI`'s driver reads this to assemble its runtime command
+    /// tree from the identical metadata schema fusion and dispatch use —
+    /// `verb`/`noun`/`opString` for the tree shape, `parameters` for help
+    /// and the macro-less fallback leaf, `commandType` for the
+    /// macro-generated leaf when one exists.
+    public let operations: [AnyOperation<Context>]
+
     private let context: Context
     private let resolver: OperationResolver
     private let retryCap: Int

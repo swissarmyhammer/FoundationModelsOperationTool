@@ -16,13 +16,16 @@ import FoundationModels
 /// `@Guide(description:)` / doc-comment description, `@OperationParam`
 /// short/aliases/allowedValues).
 ///
-/// It also emits a nested `Command: AsyncParsableCommand` (ArgumentParser
-/// leaf) for the dual-use CLI: a `@Flag`/`@Option` per stored property
-/// (`Bool` ⇒ flag, arrays ⇒ repeatable option, `Optional` ⇒ non-required
-/// option, everything else ⇒ required option), a `CommandConfiguration`
-/// named after `verb`, and a `run()` that serializes the parsed values into
-/// the canonical `op` + fields payload — the identical shape the model path
-/// sends to `AnyOperation.run`.
+/// It also emits a nested `Command: AsyncParsableCommand, OperationCommand`
+/// (ArgumentParser leaf) for the dual-use CLI: a `@Flag`/`@Option` per
+/// stored property (`Bool` ⇒ flag, arrays ⇒ repeatable option, `Optional` ⇒
+/// non-required option, everything else ⇒ required option), a
+/// `CommandConfiguration` named after `verb`, and an `operationPayload()`
+/// that serializes the parsed values into the canonical `op` + fields
+/// payload — the identical shape the model path sends to `AnyOperation.run`
+/// — plus a `CLICommand` typealias satisfying `HasCLICommand`, so
+/// `OperationsCLI`'s driver can reach `Command` generically from any
+/// `AnyOperation` built over this type.
 ///
 /// - Parameters:
 ///   - verb: The action the operation performs (e.g. `"add"`).
@@ -30,8 +33,9 @@ import FoundationModels
 ///   - description: A human- and model-facing summary of what the operation
 ///     does.
 @attached(
-    extension, conformances: OperationDefinition,
-    names: named(verb), named(noun), named(operationDescription), named(parameterMetadata), named(Command)
+    extension, conformances: OperationDefinition, HasCLICommand,
+    names: named(verb), named(noun), named(operationDescription), named(parameterMetadata), named(Command),
+        named(CLICommand)
 )
 public macro Operation(verb: String, noun: String, description: String) =
     #externalMacro(module: "OperationsMacros", type: "OperationMacro")

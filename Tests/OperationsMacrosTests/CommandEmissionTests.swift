@@ -9,15 +9,15 @@ import Testing
 @testable import Operations
 @testable import OperationsMacros
 
-/// `MacroSpec` for `@Operation`, declaring the `OperationDefinition`
-/// conformance the real `@attached(extension, conformances: ...)`
-/// declaration in `Operations.swift` grants it.
+/// `MacroSpec` for `@Operation`, declaring the `OperationDefinition`/
+/// `HasCLICommand` conformances the real `@attached(extension,
+/// conformances: ...)` declaration in `Operations.swift` grants it.
 ///
 /// Shared with `OperationMacroTests`; duplicated here (rather than
 /// imported) since `assertMacroExpansion` fixtures are conventionally
 /// self-contained per test file.
 private let operationMacroSpecs: [String: MacroSpec] = [
-    "Operation": MacroSpec(type: OperationMacro.self, conformances: ["OperationDefinition"])
+    "Operation": MacroSpec(type: OperationMacro.self, conformances: ["OperationDefinition", "HasCLICommand"])
 ]
 
 @Suite struct CommandEmissionExpansionTests {
@@ -57,7 +57,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var notify: Bool
                 }
 
-                extension TagNote: OperationDefinition {
+                extension TagNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "tag"
                     static let noun: String = "note"
                     static let operationDescription: String = "Tag a note"
@@ -68,7 +68,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "notify", type: .boolean, required: true, description: "Whether to notify watchers"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "tag", abstract: "Tag a note")
 
                         @Option(help: "The note title")
@@ -95,9 +95,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             if let note {
                                 payload.append(("note", note))
                             }
-                            if !labels.isEmpty {
-                                payload.append(("labels", labels))
-                            }
+                            payload.append(("labels", labels))
                             payload.append(("notify", notify))
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
@@ -108,6 +106,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -133,7 +133,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var title: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -141,7 +141,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title", short: "t"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(name: [.long, .customShort("t")], help: "The note title")
@@ -165,6 +165,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -202,7 +204,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var tagGroups: [[String]]
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -211,7 +213,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "tagGroups", type: .array(of: .array(of: .string)), required: true, description: "Groups of related tags"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(help: "The note title")
@@ -235,6 +237,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -263,7 +267,10 @@ private struct AddNoteCommandFixtureOutput: Encodable, Sendable {}
 /// (`title`, `body`, `tags`), plus a `pinned: Bool` field so all four
 /// `CommandFieldKind` mappings (required option, optional option, repeatable
 /// option, flag) are exercised through a real compile, not just
-/// `assertMacroExpansion`.
+/// `assertMacroExpansion` — and a required `scores: [Int]` array, since a
+/// repeatable option always defaults to `[]` regardless of its
+/// `ParamMeta.required`, distinguishing the required-array round trip from
+/// the optional-array one (`tags`).
 @Generable
 @Operation(verb: "add", noun: "note", description: "Create a new note")
 private struct AddNoteCommandFixture {
@@ -278,6 +285,9 @@ private struct AddNoteCommandFixture {
 
     @Guide(description: "Whether the note is pinned")
     var pinned: Bool
+
+    @Guide(description: "Revision scores")
+    var scores: [Int]
 }
 
 extension AddNoteCommandFixture {
@@ -339,7 +349,10 @@ extension AddNoteCommandFixture {
     }
 
     @Test func parsedCommandPayloadMatchesTheShapeAnyOperationRunDecodes() async throws {
-        let command = try AddNoteCommandFixture.Command.parse(["--title", "Hi", "--tags", "a", "--tags", "b"])
+        let command = try AddNoteCommandFixture.Command.parse([
+            "--title", "Hi", "--body", "Groceries list", "--tags", "a", "--tags", "b", "--pinned", "--scores", "1",
+            "--scores", "2",
+        ])
         let payload = command.operationPayload()
 
         // The model path sends `AnyOperation.run` a payload built the same
@@ -348,9 +361,62 @@ extension AddNoteCommandFixture {
         // strip it before typed construction. Decoding the CLI payload
         // through the identical `AddNoteCommandFixture(_:)` initializer
         // proves the two payload shapes converge on the same typed
-        // operation.
+        // operation — across every field kind (required option, optional
+        // option, repeatable option, flag), not just a subset of them.
         let decoded = try AddNoteCommandFixture(payload)
         #expect(decoded.title == "Hi")
+        #expect(decoded.body == "Groceries list")
         #expect(decoded.tags == ["a", "b"])
+        #expect(decoded.pinned == true)
+        #expect(decoded.scores == [1, 2])
+    }
+
+    @Test func parsedCommandPayloadMatchesTheShapeAnyOperationRunDecodesWithUnsuppliedOptionalsAndFlag() async throws {
+        let command = try AddNoteCommandFixture.Command.parse(["--title", "Hi"])
+        let payload = command.operationPayload()
+
+        // The inverse of the above: unsupplied optional/flag fields must
+        // also decode correctly (to `nil`/`false`), not just supplied ones
+        // — and the unsupplied required array field must decode to `[]`.
+        let decoded = try AddNoteCommandFixture(payload)
+        #expect(decoded.title == "Hi")
+        #expect(decoded.body == nil)
+        #expect(decoded.tags == nil)
+        #expect(decoded.pinned == false)
+        #expect(decoded.scores == [])
+    }
+
+    @Test func parsedCommandPayloadIncludesAnUnsuppliedRequiredArrayFieldAsEmpty() throws {
+        // Unlike an optional array field, a required array field is always
+        // present in the payload (see `payloadAssignmentText`'s
+        // `.repeatableOption` case) — sent as `[]` rather than omitted,
+        // since omitting it would leave the payload missing the key
+        // entirely, which `Generable`'s synthesized initializer throws
+        // decoding for a non-optional property.
+        let command = try AddNoteCommandFixture.Command.parse(["--title", "Hi"])
+        let payload = command.operationPayload()
+
+        #expect(try payload.value([Int].self, forProperty: "scores") == [])
+    }
+
+    @Test func parsedCommandPayloadWithAnUnsuppliedRequiredArrayFieldStillDecodesToAnEmptyArray() async throws {
+        let command = try AddNoteCommandFixture.Command.parse(["--title", "Hi"])
+        let payload = command.operationPayload()
+
+        // Completes the round trip the previous test only builds the
+        // payload for: `AddNoteCommandFixture`'s `@Generable`-synthesized
+        // initializer decodes the payload's empty `scores` array back to an
+        // empty array.
+        let decoded = try AddNoteCommandFixture(payload)
+        #expect(decoded.scores == [])
+    }
+
+    @Test func parsedCommandPayloadIncludesASuppliedRequiredArrayField() async throws {
+        let command = try AddNoteCommandFixture.Command.parse(["--title", "Hi", "--scores", "1", "--scores", "2"])
+        let payload = command.operationPayload()
+
+        #expect(try payload.value([Int].self, forProperty: "scores") == [1, 2])
+        let decoded = try AddNoteCommandFixture(payload)
+        #expect(decoded.scores == [1, 2])
     }
 }

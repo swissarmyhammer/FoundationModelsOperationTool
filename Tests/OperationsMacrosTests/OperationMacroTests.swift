@@ -6,11 +6,11 @@ import Testing
 
 @testable import OperationsMacros
 
-/// `MacroSpec` for `@Operation`, declaring the `OperationDefinition`
-/// conformance the real `@attached(extension, conformances: ...)`
-/// declaration in `Operations.swift` grants it.
+/// `MacroSpec` for `@Operation`, declaring the `OperationDefinition`/
+/// `HasCLICommand` conformances the real `@attached(extension,
+/// conformances: ...)` declaration in `Operations.swift` grants it.
 private let operationMacroSpecs: [String: MacroSpec] = [
-    "Operation": MacroSpec(type: OperationMacro.self, conformances: ["OperationDefinition"])
+    "Operation": MacroSpec(type: OperationMacro.self, conformances: ["OperationDefinition", "HasCLICommand"])
 ]
 
 @Suite struct OperationMacroTests {
@@ -32,7 +32,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var title: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -40,7 +40,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(help: "The note title")
@@ -64,6 +64,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -99,7 +101,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var tags: [String]?
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -109,7 +111,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "tags", type: .array(of: .string), required: false, description: "Tags to attach"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(help: "The note title")
@@ -145,6 +147,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -186,7 +190,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var scores: [Int]
                 }
 
-                extension UpdateNote: OperationDefinition {
+                extension UpdateNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "update"
                     static let noun: String = "note"
                     static let operationDescription: String = "Update a note"
@@ -197,7 +201,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "scores", type: .array(of: .integer), required: true, description: "Scores for each revision"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "update", abstract: "Update a note")
 
                         @Option(help: "How many times the note was viewed")
@@ -225,9 +229,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                                 payload.append(("rating", rating))
                             }
                             payload.append(("pinned", pinned))
-                            if !scores.isEmpty {
-                                payload.append(("scores", scores))
-                            }
+                            payload.append(("scores", scores))
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
                                 })
@@ -237,6 +239,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -256,13 +260,13 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                 struct ListNotes {
                 }
 
-                extension ListNotes: OperationDefinition {
+                extension ListNotes: OperationDefinition, HasCLICommand {
                     static let verb: String = "list"
                     static let noun: String = "notes"
                     static let operationDescription: String = "List every note"
                     static let parameterMetadata: [ParamMeta] = []
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "list", abstract: "List every note")
 
 
@@ -285,6 +289,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -310,7 +316,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var title: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -318,7 +324,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title", short: "t", aliases: ["name"]),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(name: [.long, .customShort("t")], help: "The note title")
@@ -342,6 +348,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -365,7 +373,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var priority: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -373,7 +381,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "priority", type: .string, required: true, description: "The note priority", allowedValues: ["low", "medium", "high"]),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(help: "The note priority")
@@ -397,6 +405,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -426,7 +436,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var priority: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -434,7 +444,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "priority", type: .string, required: true, description: "The note priority", allowedValues: []),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(help: "The note priority")
@@ -458,6 +468,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -481,7 +493,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var title: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
@@ -489,7 +501,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         ParamMeta(name: "title", type: .string, required: true, description: "The note title"),
                     ]
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
                         @Option(help: "The note title")
@@ -513,6 +525,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             macroSpecs: operationMacroSpecs
@@ -534,13 +548,13 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var op: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
 
@@ -563,6 +577,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             diagnostics: [
@@ -590,13 +606,13 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var _Op: String
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
 
@@ -619,6 +635,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             diagnostics: [
@@ -648,13 +666,13 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                     var createdAt: Date
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
 
@@ -677,6 +695,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             diagnostics: [
@@ -704,13 +724,13 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                 struct AddNote {
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = ""
                     static let noun: String = "note"
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "", abstract: "Create a new note")
 
 
@@ -733,6 +753,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             diagnostics: [
@@ -757,13 +779,13 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                 struct AddNote {
                 }
 
-                extension AddNote: OperationDefinition {
+                extension AddNote: OperationDefinition, HasCLICommand {
                     static let verb: String = "add"
                     static let noun: String = ""
                     static let operationDescription: String = "Create a new note"
                     static let parameterMetadata: [ParamMeta] = []
 
-                    struct Command: AsyncParsableCommand {
+                    struct Command: AsyncParsableCommand, OperationCommand {
                         static let configuration = CommandConfiguration(commandName: "add", abstract: "Create a new note")
 
 
@@ -786,6 +808,8 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                             print(operationPayload().jsonString)
                         }
                     }
+
+                    typealias CLICommand = Command
                 }
                 """,
             diagnostics: [

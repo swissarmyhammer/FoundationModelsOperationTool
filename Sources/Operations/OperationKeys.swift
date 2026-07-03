@@ -6,9 +6,14 @@
 /// to treat names that differ only by case or `_`/`-` separators as the same
 /// key. This is the single place that defines what "the same, ignoring case
 /// and separators" means, so the two call sites can't drift apart.
-internal enum OperationKeys {
+public enum OperationKeys {
     /// The fused schema's discriminator property name.
-    internal static let opFieldName = "op"
+    ///
+    /// Public so `OperationsCLI`'s macro-less fallback leaf — which, unlike
+    /// the macro-generated `Command`, has no compiler-plugin-side copy of
+    /// this literal to fall back on — can build the identical canonical
+    /// payload shape `AnyOperation.run` expects without duplicating it.
+    public static let opFieldName = "op"
 
     /// The fused schema's discriminator property description.
     internal static let opFieldDescription = "The operation to perform, as \"verb noun\"."

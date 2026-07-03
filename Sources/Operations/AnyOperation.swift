@@ -23,6 +23,21 @@ public struct AnyOperation<Context: Sendable>: Sendable {
     /// One entry per parameter, in declaration order.
     public let parameters: [ParamMeta]
 
+    /// The concrete `OperationDefinition` type this `AnyOperation` erases,
+    /// type-erased in turn to `any OperationDefinition.Type`.
+    ///
+    /// `OperationsCLI`'s driver opens this existential (`Rep.Type` generic
+    /// parameters bound to it) to obtain distinct nominal witness types when
+    /// assembling its runtime command tree — see plan.md's "generic
+    /// `NounNode<Rep>` instantiated per noun via opened existentials".
+    public let definitionType: any OperationDefinition.Type
+
+    /// The macro-generated CLI leaf command for this operation, if
+    /// `definitionType` conforms to `HasCLICommand` — `nil` for an operation
+    /// using the manual escape hatch (plan.md's "Manual escape hatch"),
+    /// which has no macro-generated `Command` to offer.
+    public let commandType: (any OperationCommand.Type)?
+
     /// The canonical `"verb noun"` identifier the resolver and schema
     /// fusion match against (e.g. `"add note"`).
     ///
@@ -49,6 +64,8 @@ public struct AnyOperation<Context: Sendable>: Sendable {
         noun = O.noun
         description = O.operationDescription
         parameters = O.parameterMetadata
+        definitionType = O.self
+        commandType = (O.self as? any HasCLICommand.Type)?.commandType
         run = { content, context in
             let operation: O
             do {

@@ -120,6 +120,20 @@ private let emptyStringLiteralText = "\"\""
 /// compiler-plugin target cannot depend on.
 private let opFieldName = "op"
 
+/// Normalizes `name` by lowercasing it and stripping `_`/`-` separators, for
+/// comparison against `opFieldName`.
+///
+/// Deliberately mirrors the runtime `Operations` target's
+/// `OperationKeys.normalized(_:)` algorithm rather than calling it: this
+/// compiler-plugin target cannot depend on that runtime target (the same
+/// constraint documented on `opFieldName` above), so the reserved-name check
+/// in `operationParameterEntry(for:identifierPattern:variable:in:)` needs its
+/// own copy. If `OperationKeys.normalized(_:)`'s algorithm ever changes, this
+/// must change with it.
+private func normalized(_ name: String) -> String {
+    name.lowercased().filter { $0 != "_" && $0 != "-" }
+}
+
 /// Extracts a joined description from a stored property's `///` doc-comment
 /// trivia, or `nil` if it carries none.
 private func docCommentDescription(from trivia: Trivia) -> String? {
@@ -287,6 +301,12 @@ private func anyOfAllowedValues(from expr: ExprSyntax) -> [String]? {
     return values
 }
 
+/// The `@OperationParam(short:)` argument label.
+///
+/// The single source of truth for this name, matching `aliasesLabel`'s and
+/// `allowedValuesLabel`'s role for their own labels.
+private let shortLabel = "short"
+
 /// The `@OperationParam(aliases:)` argument label.
 ///
 /// Also the `ParamMeta`
@@ -329,7 +349,7 @@ private func applyOperationParamArgument(
 ) {
     guard let label = argument.label?.text else { return }
 
-    if label == "short" {
+    if label == shortLabel {
         guard let literal = argument.expression.plainStringLiteralValue, let first = literal.first else { return }
         short = first
         return
@@ -430,7 +450,10 @@ public struct OperationMacro: ExtensionMacro {
             fields: parameterEntries.compactMap(\.commandField)
         )
 
-        // The `OperationDefinition` conformance's static members plus the nested `Command` declaration.
+        // The `OperationDefinition`/`HasCLICommand` conformance's static
+        // members, the nested `Command` declaration, and the `CLICommand`
+        // typealias satisfying `HasCLICommand` (see `Operations.swift`'s
+        // `@Operation` doc comment).
         let membersText = """
             \(accessText)static let verb: String = \(verbText)
             \(accessText)static let noun: String = \(nounText)
@@ -438,11 +461,13 @@ public struct OperationMacro: ExtensionMacro {
             \(accessText)static let parameterMetadata: [ParamMeta] = \(parameterMetadataText)
 
             \(commandText)
+
+            \(accessText)typealias CLICommand = Command
             """
 
         let extensionDecl = try ExtensionDeclSyntax(
             """
-            extension \(type.trimmed): OperationDefinition {
+            extension \(type.trimmed): OperationDefinition, HasCLICommand {
             \(raw: membersText)
             }
             """
@@ -652,7 +677,7 @@ private func operationParameterEntry(
         return nil
     }
 
-    if propertyName.lowercased().filter({ $0 != "_" && $0 != "-" }) == opFieldName {
+    if normalized(propertyName) == opFieldName {
         context.diagnose(
             OperationMacroDiagnostic.reservedParameterName(propertyName).diagnose(at: identifierPattern)
         )
@@ -731,31 +756,51 @@ private func commandFieldDeclarationText(_ field: CommandFieldSpec) -> String {
 /// Builds the source text of one `operationPayload()` statement folding
 /// `field`'s parsed value into the `payload` array of `(name, value)` pairs.
 ///
-/// A `.flag` is always present (its `@Flag` default is `false`); a
-/// `.repeatableOption` is included only when non-empty; a required
-/// `.scalarOption` is always present; an optional `.scalarOption` is
-/// included only when set.
+/// A `.flag` is always present (its `@Flag` default is `false`); a required
+/// `.scalarOption` or `.repeatableOption` is always present (an unsupplied
+/// required array is sent as `[]`, not omitted — omitting it would leave the
+/// payload missing the key entirely, which `Generable`'s synthesized
+/// initializer throws decoding for a non-optional property, unlike a merely
+/// empty array); an optional `.scalarOption`/`.repeatableOption` is included
+/// only when set/non-empty.
 private func payloadAssignmentText(_ field: CommandFieldSpec) -> String {
     let key = swiftStringLiteral(field.name)
+    // Every unconditionally-included case (a `.flag`, or a required
+    // `.repeatableOption`/`.scalarOption`) emits this identical append —
+    // extracted once so the three cases below don't repeat the literal.
+    let basePayloadAssignment = "payload.append((\(key), \(field.name)))"
     switch field.kind {
     case .flag:
-        return "payload.append((\(key), \(field.name)))"
+        return basePayloadAssignment
     case .repeatableOption:
-        return """
-            if !\(field.name).isEmpty {
-                payload.append((\(key), \(field.name)))
-            }
-            """
+        return conditionalPayloadAssignment(
+            unless: field.required,
+            conditionText: "!\(field.name).isEmpty",
+            assignmentText: basePayloadAssignment
+        )
     case .scalarOption:
-        guard !field.required else {
-            return "payload.append((\(key), \(field.name)))"
-        }
-        return """
-            if let \(field.name) {
-                payload.append((\(key), \(field.name)))
-            }
-            """
+        return conditionalPayloadAssignment(
+            unless: field.required,
+            conditionText: "let \(field.name)",
+            assignmentText: basePayloadAssignment
+        )
     }
+}
+
+/// Wraps `assignmentText` in `if \(conditionText) { ... }`, or returns it
+/// unwrapped when `required` — the shared shape of a `.repeatableOption`'s
+/// emptiness check and a `.scalarOption`'s optional-binding check in
+/// `payloadAssignmentText(_:)`, which otherwise differ only in that
+/// condition's source text.
+private func conditionalPayloadAssignment(unless required: Bool, conditionText: String, assignmentText: String) -> String {
+    guard !required else {
+        return assignmentText
+    }
+    return """
+        if \(conditionText) {
+            \(assignmentText)
+        }
+        """
 }
 
 /// Builds the nested `Command: AsyncParsableCommand` (ArgumentParser leaf)
@@ -801,7 +846,7 @@ private func commandStructText(
     let payloadAssignmentsText = fields.map(payloadAssignmentText).joined(separator: "\n")
 
     return """
-        \(accessText)struct Command: AsyncParsableCommand {
+        \(accessText)struct Command: AsyncParsableCommand, OperationCommand {
             \(accessText)static let configuration = CommandConfiguration(commandName: \(verbText), abstract: \(descriptionText))
 
         \(fieldDeclarationsText)

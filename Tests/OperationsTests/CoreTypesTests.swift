@@ -151,6 +151,23 @@ private struct FixtureOperation: OperationDefinition {
         #expect(anyOp.parameters == FixtureOperation.parameterMetadata)
     }
 
+    // MARK: - CLI-facing metadata
+
+    @Test func anyOperationCapturesItsDefinitionType() {
+        let anyOp = AnyOperation(FixtureOperation.self)
+
+        #expect(ObjectIdentifier(anyOp.definitionType) == ObjectIdentifier(FixtureOperation.self))
+    }
+
+    @Test func anyOperationCommandTypeIsNilForAHandConformedOperation() {
+        // `FixtureOperation` conforms to `OperationDefinition` directly (no
+        // `@Operation` macro, no nested `Command`), proving the manual escape
+        // hatch has no CLI leaf to offer the driver.
+        let anyOp = AnyOperation(FixtureOperation.self)
+
+        #expect(anyOp.commandType == nil)
+    }
+
     @Test func anyOperationRunHappyPathReturnsDeterministicSortedKeyJSON() async throws {
         let anyOp = AnyOperation(FixtureOperation.self)
         let content = GeneratedContent(properties: ["message": "hi"])
