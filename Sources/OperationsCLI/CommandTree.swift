@@ -45,7 +45,7 @@ internal struct RootCommand: AsyncParsableCommand {
 /// never opens anything.
 internal struct NounNode<Rep: OperationDefinition>: ParsableCommand {
     internal static var configuration: CommandConfiguration {
-        groupCommandConfiguration(for: Rep.self, in: CLIRuntime.current?.nounGroups, defaultCommandName: Rep.noun)
+        groupCommandConfiguration(for: Rep.self, in: CLIRuntime.current?.nounGroups, defaultingTo: Rep.noun)
     }
 }
 
@@ -59,7 +59,7 @@ internal struct NounNode<Rep: OperationDefinition>: ParsableCommand {
 /// `nounGroups`.
 internal struct ToolNode<Rep: OperationDefinition>: ParsableCommand {
     internal static var configuration: CommandConfiguration {
-        groupCommandConfiguration(for: Rep.self, in: CLIRuntime.current?.toolGroups, defaultCommandName: "")
+        groupCommandConfiguration(for: Rep.self, in: CLIRuntime.current?.toolGroups, defaultingTo: "")
     }
 }
 
@@ -71,7 +71,7 @@ internal struct ToolNode<Rep: OperationDefinition>: ParsableCommand {
 private func groupCommandConfiguration<Rep: OperationDefinition>(
     for rep: Rep.Type,
     in groups: [ObjectIdentifier: CLIGroup]?,
-    defaultCommandName: String
+    defaultingTo defaultCommandName: String
 ) -> CommandConfiguration {
     let group = groups?[ObjectIdentifier(rep)]
     return CommandConfiguration(
