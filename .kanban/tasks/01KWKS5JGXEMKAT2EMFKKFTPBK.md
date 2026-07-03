@@ -16,8 +16,8 @@ comments:
 
     Leaving in doing for /review.
   timestamp: 2026-07-03T11:09:42.135155+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8a80
 title: Add tests for OperationError.description's decodingFailed/encodingFailed cases
 ---
 Sources/Operations/OperationError.swift:48,50

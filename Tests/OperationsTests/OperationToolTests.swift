@@ -318,4 +318,59 @@ private struct DeleteNoteToolFixture: OperationDefinition {
         #expect(afterTerminal.contains("add note"))
         #expect(afterTerminal.contains("stopping") == false)
     }
+
+    // MARK: - matchOpString: non-two-token fallback (exact-joined-token match)
+    //
+    // Every dispatch test above supplies an opString that tokenizes to
+    // exactly 2 words, so these exercise `matchOpString` directly (it's
+    // `internal`, reachable via `@testable import`) against the fallback
+    // branch taken when the tokenized opString isn't a verb/noun pair.
+
+    @Test func matchOpStringSingleTokenExactlyMatchingACandidatesOwnSingleTokenFormReturnsIt() {
+        let resolver = OperationResolver()
+        let candidates = [
+            OperationResolver.OpCandidate(verb: "add", noun: "note", opString: "addnote"),
+            OperationResolver.OpCandidate(verb: "delete", noun: "note", opString: "delete note"),
+        ]
+
+        let matched = resolver.matchOpString("addnote", against: candidates)
+
+        #expect(matched == "addnote")
+    }
+
+    @Test func matchOpStringSingleTokenWithNoEquivalentCandidateReturnsNil() {
+        let resolver = OperationResolver()
+        let candidates = [
+            OperationResolver.OpCandidate(verb: "add", noun: "note", opString: "addnote"),
+            OperationResolver.OpCandidate(verb: "delete", noun: "note", opString: "delete note"),
+        ]
+
+        let matched = resolver.matchOpString("frobnicate", against: candidates)
+
+        #expect(matched == nil)
+    }
+
+    @Test func matchOpStringThreeTokensExactlyMatchingACandidatesEquivalentTokenizationReturnsIt() {
+        let resolver = OperationResolver()
+        let candidates = [
+            OperationResolver.OpCandidate(verb: "add", noun: "note", opString: "add_the_note"),
+            OperationResolver.OpCandidate(verb: "delete", noun: "note", opString: "delete note"),
+        ]
+
+        let matched = resolver.matchOpString("add the note", against: candidates)
+
+        #expect(matched == "add_the_note")
+    }
+
+    @Test func matchOpStringThreeTokensWithNoEquivalentCandidateReturnsNil() {
+        let resolver = OperationResolver()
+        let candidates = [
+            OperationResolver.OpCandidate(verb: "add", noun: "note", opString: "addnote"),
+            OperationResolver.OpCandidate(verb: "delete", noun: "note", opString: "delete note"),
+        ]
+
+        let matched = resolver.matchOpString("add the note", against: candidates)
+
+        #expect(matched == nil)
+    }
 }
