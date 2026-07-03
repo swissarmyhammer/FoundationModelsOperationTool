@@ -18,8 +18,8 @@ comments:
 
     Leaving in doing for review per /implement workflow.
   timestamp: 2026-07-03T11:47:54.340664+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8c80
 title: Add test for OperationResolver.resolveParameters on non-structure GeneratedContent
 ---
 Sources/Operations/OperationResolver.swift:153-159
