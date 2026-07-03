@@ -350,6 +350,18 @@ private struct DeleteNoteToolFixture: OperationDefinition {
         #expect(matched == nil)
     }
 
+    @Test func matchOpStringSingleTokenIsCaseInsensitiveAgainstACandidatesOwnSingleTokenForm() {
+        let resolver = OperationResolver()
+        let candidates = [
+            OperationResolver.OpCandidate(verb: "add", noun: "note", opString: "addnote"),
+            OperationResolver.OpCandidate(verb: "delete", noun: "note", opString: "delete note"),
+        ]
+
+        let matched = resolver.matchOpString("ADDNOTE", against: candidates)
+
+        #expect(matched == "addnote")
+    }
+
     @Test func matchOpStringThreeTokensExactlyMatchingACandidatesEquivalentTokenizationReturnsIt() {
         let resolver = OperationResolver()
         let candidates = [
@@ -372,5 +384,17 @@ private struct DeleteNoteToolFixture: OperationDefinition {
         let matched = resolver.matchOpString("add the note", against: candidates)
 
         #expect(matched == nil)
+    }
+
+    @Test func matchOpStringThreeTokensIsCaseInsensitiveAgainstACandidatesEquivalentTokenization() {
+        let resolver = OperationResolver()
+        let candidates = [
+            OperationResolver.OpCandidate(verb: "add", noun: "note", opString: "add_the_note"),
+            OperationResolver.OpCandidate(verb: "delete", noun: "note", opString: "delete note"),
+        ]
+
+        let matched = resolver.matchOpString("ADD THE NOTE", against: candidates)
+
+        #expect(matched == "add_the_note")
     }
 }
