@@ -324,6 +324,19 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"id\":\"note-1\""))
+
+        // `result.output` is the *executed* operation's JSON, not a fresh
+        // payload — the actual round-trip claim is that feeding it back in
+        // as a payload for the same operation is something
+        // `OperationResolver.resolveParameters` (the same resolution
+        // `OperationTool.call` runs every payload through) accepts: every
+        // required parameter is found, and the resolved `id` matches what
+        // was sent, unchanged by the trip through JSON and back.
+        let reparsedOutput = try GeneratedContent(json: result.output)
+        let resolution = OperationResolver().resolveParameters(reparsedOutput, matching: ArchiveNoteCLIFixture.parameterMetadata)
+
+        #expect(resolution.missingRequired.isEmpty)
+        #expect(try resolution.content.value(String.self, forProperty: "id") == "note-1")
     }
 
     @Test func fallbackLeafAppearsInNounHelp() async throws {

@@ -14,8 +14,8 @@ comments:
 
     Leaving in doing per implement workflow — ready for /review.
   timestamp: 2026-07-03T15:12:11.006822+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9680'
 title: Add tests for OperationToolTests' untested key-alias precedence cases (tags/labels, authorName/author_name)
 ---
 Surfaced by /review while working task ^zpmz5v3 (decodingFailed corrective-return path test) — pre-existing gaps in Tests/OperationsTests/OperationToolTests.swift, unrelated to that task's scope.
