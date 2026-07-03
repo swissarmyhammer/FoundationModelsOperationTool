@@ -174,7 +174,7 @@ private func makeSingleToolDriver() throws -> OperationCLIDriver {
 /// A two-tool driver: the `<executable> <tool> <noun> <verb>` grammar.
 private func makeMultiToolDriver() throws -> OperationCLIDriver {
     try OperationCLIDriver(
-        [AnyOperationTool(try makeNotesTool()), AnyOperationTool(try makeTasksTool())],
+        tools: [AnyOperationTool(try makeNotesTool()), AnyOperationTool(try makeTasksTool())],
         executableName: "multitool"
     )
 }
@@ -186,7 +186,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func executesAddNoteAndPrintsItsJSON() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--title", "Hi", "--tags", "a", "--tags", "b"])
+        let result = await driver.run(arguments: ["note", "add", "--title", "Hi", "--tags", "a", "--tags", "b"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"title\":\"Hi\""))
@@ -196,7 +196,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func repeatedOptionValuesAccumulateIntoAnArray() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--title", "Hi", "--tags", "a", "--tags", "b", "--tags", "c"])
+        let result = await driver.run(arguments: ["note", "add", "--title", "Hi", "--tags", "a", "--tags", "b", "--tags", "c"])
 
         #expect(result.output.contains("\"tags\":[\"a\",\"b\",\"c\"]"))
     }
@@ -204,7 +204,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func inlineEqualsValueIsAccepted() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--title=Hi"])
+        let result = await driver.run(arguments: ["note", "add", "--title=Hi"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"title\":\"Hi\""))
@@ -213,7 +213,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func combinedShortFlagsSetBothBooleans() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--title", "Hi", "-pu"])
+        let result = await driver.run(arguments: ["note", "add", "--title", "Hi", "-pu"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"pinned\":true"))
@@ -223,7 +223,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func terminatorDoesNotBreakParsing() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "delete", "--id", "note-1", "--"])
+        let result = await driver.run(arguments: ["note", "delete", "--id", "note-1", "--"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"id\":\"note-1\""))
@@ -237,7 +237,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func fallbackLeafRoundTripsToTheSamePayloadTheResolverAccepts() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "archive", "--id", "note-1"])
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"id\":\"note-1\""))
@@ -246,7 +246,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func fallbackLeafAppearsInNounHelp() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "--help"])
+        let result = await driver.run(arguments: ["note", "--help"])
 
         #expect(result.output.contains("archive"))
     }
@@ -254,7 +254,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func fallbackLeafOwnHelpDescribesItsParameters() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "archive", "--help"])
+        let result = await driver.run(arguments: ["note", "archive", "--help"])
 
         #expect(result.output.contains("Archive a note"))
         #expect(result.output.contains("--id"))
@@ -263,7 +263,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func fallbackLeafParsesAnIntegerParameter() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "archive", "--id", "note-1", "--reasonCode", "42"])
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1", "--reasonCode", "42"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"reasonCode\":42"))
@@ -272,7 +272,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func fallbackLeafOmitsAnUnsuppliedOptionalIntegerParameter() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "archive", "--id", "note-1"])
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1"])
 
         #expect(result.exitCode == 0)
         // `JSONEncoder`'s synthesized encoding for an `Optional` property
@@ -288,7 +288,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func rootHelpListsEveryNoun() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["--help"])
+        let result = await driver.run(arguments: ["--help"])
 
         #expect(result.output.contains("note"))
     }
@@ -296,7 +296,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func nounHelpListsEveryVerbWithTheCorrectUsagePrefix() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "--help"])
+        let result = await driver.run(arguments: ["note", "--help"])
 
         #expect(result.output.contains("add"))
         #expect(result.output.contains("delete"))
@@ -307,7 +307,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func verbHelpShowsGuideDescriptionsAndTheCorrectUsagePrefix() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--help"])
+        let result = await driver.run(arguments: ["note", "add", "--help"])
 
         #expect(result.output.contains("The note title"))
         #expect(result.output.contains("Tags to attach"))
@@ -322,7 +322,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func completionScriptContainsEveryNounVerbAndFlag() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["--generate-completion-script", "zsh"])
+        let result = await driver.run(arguments: ["--generate-completion-script", "zsh"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("note"))
@@ -336,7 +336,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func completionScriptIncludesTheMacroLessFallbackLeafsFlags() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["--generate-completion-script", "zsh"])
+        let result = await driver.run(arguments: ["--generate-completion-script", "zsh"])
 
         #expect(result.output.contains("archive note: --id"))
     }
@@ -344,7 +344,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func inlineEqualsShellFormIsAccepted() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["--generate-completion-script=zsh"])
+        let result = await driver.run(arguments: ["--generate-completion-script=zsh"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("note"))
@@ -358,7 +358,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func singleToolCollapsesTheToolLevelAway() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--title", "Hi"])
+        let result = await driver.run(arguments: ["note", "add", "--title", "Hi"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"title\":\"Hi\""))
@@ -367,7 +367,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func multiToolRequiresTheToolLevelSegment() async throws {
         let driver = try makeMultiToolDriver()
 
-        let result = await driver.run(["notes", "note", "add", "--title", "Hi"])
+        let result = await driver.run(arguments: ["notes", "note", "add", "--title", "Hi"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"title\":\"Hi\""))
@@ -376,7 +376,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func multiToolDispatchesTheSecondToolsOperation() async throws {
         let driver = try makeMultiToolDriver()
 
-        let result = await driver.run(["tasks", "task", "add", "--title", "Groceries"])
+        let result = await driver.run(arguments: ["tasks", "task", "add", "--title", "Groceries"])
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"title\":\"Groceries\""))
@@ -385,7 +385,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func multiToolRootHelpListsEveryToolName() async throws {
         let driver = try makeMultiToolDriver()
 
-        let result = await driver.run(["--help"])
+        let result = await driver.run(arguments: ["--help"])
 
         #expect(result.output.contains("notes"))
         #expect(result.output.contains("tasks"))
@@ -395,7 +395,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
         let tool = try makeNotesTool()
 
         do {
-            _ = try OperationCLIDriver([AnyOperationTool(tool), AnyOperationTool(tool)])
+            _ = try OperationCLIDriver(tools: [AnyOperationTool(tool), AnyOperationTool(tool)])
             Issue.record("expected OperationCLIDriverError.duplicateToolName to be thrown")
         } catch let error as OperationCLIDriverError {
             #expect(error == .duplicateToolName("notes"))
@@ -422,7 +422,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
         // be accepted, not rejected as duplicates. A thrown
         // `OperationCLIDriverError.duplicateToolName` here would fail this
         // test by propagating out of the `throws` test function.
-        _ = try OperationCLIDriver([AnyOperationTool(lowercaseTool), AnyOperationTool(uppercaseTool)])
+        _ = try OperationCLIDriver(tools: [AnyOperationTool(lowercaseTool), AnyOperationTool(uppercaseTool)])
     }
 }
 
@@ -433,7 +433,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func unknownNounReturnsAnErrorWithNonZeroExitCode() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["notanoun", "add"])
+        let result = await driver.run(arguments: ["notanoun", "add"])
 
         #expect(result.exitCode != 0)
         #expect(!result.output.isEmpty)
@@ -442,7 +442,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func unknownVerbReturnsAnErrorWithNonZeroExitCode() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "notaverb"])
+        let result = await driver.run(arguments: ["note", "notaverb"])
 
         #expect(result.exitCode != 0)
         #expect(!result.output.isEmpty)
@@ -451,7 +451,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func missingRequiredParameterReturnsAnErrorNamingIt() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add"])
+        let result = await driver.run(arguments: ["note", "add"])
 
         #expect(result.exitCode != 0)
         #expect(result.output.contains("title"))
@@ -460,7 +460,7 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
     @Test func badIntValueReturnsAnErrorNamingTheParameter() async throws {
         let driver = try makeSingleToolDriver()
 
-        let result = await driver.run(["note", "add", "--title", "Hi", "--priority", "not-a-number"])
+        let result = await driver.run(arguments: ["note", "add", "--title", "Hi", "--priority", "not-a-number"])
 
         #expect(result.exitCode != 0)
         #expect(result.output.contains("priority"))

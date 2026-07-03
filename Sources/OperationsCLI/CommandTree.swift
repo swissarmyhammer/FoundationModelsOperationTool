@@ -8,7 +8,7 @@ import Operations
 /// single, non-generic type — unlike `NounNode`/`ToolNode`, nothing is ever
 /// compared against it, so it needs no per-driver-instance type
 /// distinctness, only the ambient `CLIRuntime.current` registry
-/// `OperationCLIDriver.run(_:)` sets for the scope of one call.
+/// `OperationCLIDriver.run(arguments:)` sets for the scope of one call.
 ///
 /// `commandName` reads `CLIRuntime.current?.rootCommandName`: without it,
 /// ArgumentParser's own default derives the name shown in usage lines from
@@ -66,7 +66,7 @@ internal struct ToolNode<Rep: OperationDefinition>: ParsableCommand {
 /// Builds a `NounNode`/`ToolNode`'s `CommandConfiguration` from `groups`'
 /// entry for `rep`, falling back to `defaultCommandName` and empty
 /// abstract/subcommands when `groups` is `nil` (read outside
-/// `OperationCLIDriver.run(_:)`'s scope) or has no entry for `rep` (an
+/// `OperationCLIDriver.run(arguments:)`'s scope) or has no entry for `rep` (an
 /// internal invariant `CLIRegistryBuilder` is responsible for upholding).
 private func groupCommandConfiguration<Rep: OperationDefinition>(
     for rep: Rep.Type,

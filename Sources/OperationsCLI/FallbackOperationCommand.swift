@@ -46,7 +46,7 @@ internal struct FallbackOperationCommand<Rep: OperationDefinition>: AsyncParsabl
     /// Mirrors the macro-generated `Command.run()`'s own print-only
     /// behavior for parity when this leaf is driven directly (outside
     /// `OperationCLIDriver`, which always intercepts before `run()` runs —
-    /// see `OperationCLIDriver.dispatch(_:)`).
+    /// see `OperationCLIDriver.dispatch(command:)`).
     internal mutating func run() async throws {
         print(operationPayload().jsonString)
     }
@@ -71,7 +71,7 @@ internal enum FallbackPayloadBuilder {
         let collected = collectRawValues(parameters: parameters, rawArguments: rawArguments)
         var properties: [(String, any ConvertibleToGeneratedContent)] = [(OperationKeys.opFieldName, opString)]
         for parameter in parameters {
-            if let value = convertedValue(collected, parameter: parameter) {
+            if let value = convertedValue(collected: collected, parameter: parameter) {
                 properties.append((parameter.name, value))
             }
         }
@@ -103,7 +103,7 @@ internal enum FallbackPayloadBuilder {
         while index < rawArguments.endIndex {
             let token = rawArguments[index]
             index = rawArguments.index(after: index)
-            let (flagName, inlineValue) = splitInlineValue(token)
+            let (flagName, inlineValue) = splitInlineValue(token: token)
             guard let parameter = parametersByFlagName[flagName] else { continue }
 
             if parameter.type == .boolean {
@@ -133,7 +133,7 @@ internal enum FallbackPayloadBuilder {
 
     /// Splits `--name=value` into `("--name", "value")`; returns `(token,
     /// nil)` unchanged for every other form (`--name`, `-s`, a bare value).
-    private static func splitInlineValue(_ token: String) -> (flagName: String, inlineValue: String?) {
+    private static func splitInlineValue(token: String) -> (flagName: String, inlineValue: String?) {
         guard token.hasPrefix("--"), let equalsIndex = token.firstIndex(of: "=") else {
             return (token, nil)
         }
@@ -142,14 +142,14 @@ internal enum FallbackPayloadBuilder {
 
     /// Converts `collected`'s raw values for `parameter` to the typed value
     /// its declared `ParamType` calls for, or `nil` if it has none.
-    private static func convertedValue(_ collected: CollectedValues, parameter: ParamMeta) -> (any ConvertibleToGeneratedContent)? {
+    private static func convertedValue(collected: CollectedValues, parameter: ParamMeta) -> (any ConvertibleToGeneratedContent)? {
         if parameter.type == .boolean {
             return collected.flags.contains(parameter.name)
         }
         guard let rawValues = collected.stringValues[parameter.name], !rawValues.isEmpty else {
             return nil
         }
-        return convertedScalarOrArray(rawValues, type: parameter.type)
+        return convertedScalarOrArray(rawValues: rawValues, type: parameter.type)
     }
 
     /// Converts `rawValues` to `type`'s Swift representation: the last
@@ -157,25 +157,25 @@ internal enum FallbackPayloadBuilder {
     ///
     /// `type` is never `.boolean` here: `convertedValue` handles booleans
     /// itself and returns before reaching this function.
-    private static func convertedScalarOrArray(_ rawValues: [String], type: ParamType) -> (any ConvertibleToGeneratedContent)? {
+    private static func convertedScalarOrArray(rawValues: [String], type: ParamType) -> (any ConvertibleToGeneratedContent)? {
         switch type {
         case .string:
             return rawValues.last
         case .integer:
-            return convertedIfLastElementParses(rawValues, using: Int.init)
+            return convertedIfLastElementParses(rawValues: rawValues, using: Int.init)
         case .number:
-            return convertedIfLastElementParses(rawValues, using: Double.init)
-        case .boolean:
-            preconditionFailure("convertedValue handles .boolean before calling convertedScalarOrArray")
+            return convertedIfLastElementParses(rawValues: rawValues, using: Double.init)
         case .array(let element):
-            return convertedArray(rawValues, elementType: element)
+            return convertedArray(rawValues: rawValues, elementType: element)
+        default:
+            preconditionFailure("convertedValue handles .boolean before calling convertedScalarOrArray")
         }
     }
 
     /// Converts `rawValues`' last element with `parse`, or `nil` if there is
     /// none or it fails to parse.
     private static func convertedIfLastElementParses<Value: ConvertibleToGeneratedContent>(
-        _ rawValues: [String],
+        rawValues: [String],
         using parse: (String) -> Value?
     ) -> Value? {
         rawValues.last.flatMap(parse)
@@ -186,16 +186,16 @@ internal enum FallbackPayloadBuilder {
     /// `elementType` is itself an array (nested arrays have no CLI
     /// representation, matching the macro leaf's own `commandFieldKind`
     /// restriction).
-    private static func convertedArray(_ rawValues: [String], elementType: ParamType) -> (any ConvertibleToGeneratedContent)? {
+    private static func convertedArray(rawValues: [String], elementType: ParamType) -> (any ConvertibleToGeneratedContent)? {
         switch elementType {
         case .string:
             return rawValues
         case .integer:
-            return convertedIfEveryElementParses(rawValues, using: Int.init)
+            return convertedIfEveryElementParses(rawValues: rawValues, using: Int.init)
         case .number:
-            return convertedIfEveryElementParses(rawValues, using: Double.init)
+            return convertedIfEveryElementParses(rawValues: rawValues, using: Double.init)
         case .boolean:
-            return convertedIfEveryElementParses(rawValues, using: { Bool($0) })
+            return convertedIfEveryElementParses(rawValues: rawValues, using: { Bool($0) })
         case .array:
             return nil
         }
@@ -204,7 +204,7 @@ internal enum FallbackPayloadBuilder {
     /// Converts every element of `rawValues` with `parse`, or `nil` if any
     /// element fails to parse.
     private static func convertedIfEveryElementParses<Value: ConvertibleToGeneratedContent>(
-        _ rawValues: [String],
+        rawValues: [String],
         using parse: (String) -> Value?
     ) -> [Value]? {
         let values = rawValues.compactMap(parse)
@@ -227,19 +227,19 @@ internal enum FallbackParameterFormatting {
     }
 
     /// One `--help`/completion-facing line describing `parameter`.
-    private static func parameterLine(_ parameter: ParamMeta) -> String {
+    private static func parameterLine(parameter: ParamMeta) -> String {
         let requiredness = parameter.required ? "" : " (optional)"
-        return "  --\(parameter.name) <\(typeName(parameter.type))>\(requiredness): \(parameter.description)"
+        return "  --\(parameter.name) <\(typeName(type: parameter.type))>\(requiredness): \(parameter.description)"
     }
 
     /// A short, human-facing name for `type`, used in `parameterLine`.
-    private static func typeName(_ type: ParamType) -> String {
+    private static func typeName(type: ParamType) -> String {
         switch type {
         case .string: return "string"
         case .integer: return "int"
         case .number: return "number"
         case .boolean: return "flag"
-        case .array(let element): return "\(typeName(element))..."
+        case .array(let element): return "\(typeName(type: element))..."
         }
     }
 }

@@ -2,11 +2,11 @@ import ArgumentParser
 import FoundationModels
 import Operations
 
-/// The result of one `OperationCLIDriver.run(_:)` invocation.
+/// The result of one `OperationCLIDriver.run(arguments:)` invocation.
 ///
 /// Deliberately a value the caller prints and exits with, rather than
 /// `OperationCLIDriver` printing to standard output/error and calling
-/// `exit()` itself: that keeps `run(_:)` a plain, testable async function.
+/// `exit()` itself: that keeps `run(arguments:)` a plain, testable async function.
 public struct CLIResult: Sendable, Equatable {
     /// The text to print — the dispatched operation's JSON output, a
     /// corrective/terminal message from the fused tool's resolver, or
@@ -27,7 +27,7 @@ public struct CLIResult: Sendable, Equatable {
 /// `FallbackOperationCommand` built from `ParamMeta` for the manual escape
 /// hatch. Every leaf's parsed payload dispatches through the identical
 /// `OperationTool.call(arguments:)` path a model call uses — see
-/// `dispatch(_:)`.
+/// `dispatch(command:)`.
 public struct OperationCLIDriver: Sendable {
     private let registry: CLIRegistry
 
@@ -43,7 +43,7 @@ public struct OperationCLIDriver: Sendable {
     /// - Throws: `OperationCLIDriverError.emptyTool` if `tool` has no
     ///   operations.
     public init<Context>(tool: OperationTool<Context>, executableName: String? = nil) throws {
-        try self.init([AnyOperationTool(tool)], executableName: executableName)
+        try self.init(tools: [AnyOperationTool(tool)], executableName: executableName)
     }
 
     /// Assembles a driver over one or more tools: `<executable> <tool>
@@ -59,7 +59,7 @@ public struct OperationCLIDriver: Sendable {
     /// - Throws: `OperationCLIDriverError` on a duplicate tool name, an
     ///   empty tool, or two operations in the same tool sharing an
     ///   `opString`.
-    public init(_ tools: [AnyOperationTool], executableName: String? = nil) throws {
+    public init(tools: [AnyOperationTool], executableName: String? = nil) throws {
         registry = try CLIRegistryBuilder.build(tools: tools, executableName: executableName)
     }
 
@@ -72,22 +72,22 @@ public struct OperationCLIDriver: Sendable {
     /// - Returns: The dispatched operation's JSON output (or a corrective
     ///   message from the fused tool's resolver) on success; ArgumentParser's
     ///   own help, usage, completion-script, or error text otherwise.
-    public func run(_ arguments: [String]) async -> CLIResult {
+    public func run(arguments: [String]) async -> CLIResult {
         await CLIRuntime.$current.withValue(registry) {
             if let completionResult = Self.completionScriptResult(for: arguments) {
                 return completionResult
             }
-            return await Self.parseAndDispatch(arguments)
+            return await Self.parseAndDispatch(arguments: arguments)
         }
     }
 
     /// Parses `arguments` and dispatches, translating a parse failure or
     /// help/version request into the same text/exit code ArgumentParser's
     /// own `exit(withError:)` would produce.
-    private static func parseAndDispatch(_ arguments: [String]) async -> CLIResult {
+    private static func parseAndDispatch(arguments: [String]) async -> CLIResult {
         do {
             let parsed = try await RootCommand.asyncParseAsRoot(arguments)
-            return await dispatch(parsed)
+            return await dispatch(command: parsed)
         } catch {
             return errorResult(for: error)
         }
@@ -98,9 +98,9 @@ public struct OperationCLIDriver: Sendable {
     /// `OperationCommand`, or ArgumentParser's own `run()` for anything else
     /// (a help/version request, or an intermediate node's default
     /// help-throwing `run()`).
-    private static func dispatch(_ parsed: ParsableCommand) async -> CLIResult {
-        guard let opCommand = parsed as? any OperationCommand else {
-            return await runNonOperationCommand(parsed)
+    private static func dispatch(command: ParsableCommand) async -> CLIResult {
+        guard let opCommand = command as? any OperationCommand else {
+            return await runNonOperationCommand(command: command)
         }
         guard let dispatch = CLIRuntime.current?.dispatchByCommandType[ObjectIdentifier(type(of: opCommand))] else {
             return CLIResult(output: "Internal error: no dispatcher registered for '\(type(of: opCommand))'.", exitCode: 1)
@@ -117,13 +117,13 @@ public struct OperationCLIDriver: Sendable {
     /// help/version request, or an intermediate node reached with no
     /// further subcommand), mirroring `AsyncParsableCommand.main(_:)`'s own
     /// sync/async dispatch.
-    private static func runNonOperationCommand(_ parsed: ParsableCommand) async -> CLIResult {
-        var command = parsed
+    private static func runNonOperationCommand(command: ParsableCommand) async -> CLIResult {
+        var mutableCommand = command
         do {
-            if var asyncCommand = command as? AsyncParsableCommand {
+            if var asyncCommand = mutableCommand as? AsyncParsableCommand {
                 try await asyncCommand.run()
             } else {
-                try command.run()
+                try mutableCommand.run()
             }
             return CLIResult(output: "", exitCode: 0)
         } catch {
@@ -144,7 +144,7 @@ public struct OperationCLIDriver: Sendable {
     /// to the script it produces from the real tree.
     ///
     /// - Returns: `nil` if `arguments` doesn't request a completion script,
-    ///   so `run(_:)` falls through to normal parsing (which recognizes the
+    ///   so `run(arguments:)` falls through to normal parsing (which recognizes the
     ///   same flag and would otherwise produce the un-augmented script).
     private static func completionScriptResult(for arguments: [String]) -> CLIResult? {
         guard let shellName = generateCompletionScriptShellArgument(in: arguments),
@@ -153,7 +153,7 @@ public struct OperationCLIDriver: Sendable {
             return nil
         }
         let script = RootCommand.completionScript(for: shell)
-        let augmented = FallbackCompletionAugmenter.augment(script, fallbackParameterLines: CLIRuntime.current?.fallbackParameterLines ?? [])
+        let augmented = FallbackCompletionAugmenter.augment(script: script, fallbackParameterLines: CLIRuntime.current?.fallbackParameterLines ?? [])
         return CLIResult(output: augmented, exitCode: 0)
     }
 
@@ -183,7 +183,7 @@ internal enum FallbackCompletionAugmenter {
     /// Returns `script` unchanged if `fallbackParameterLines` is empty
     /// (every operation is macro-generated); otherwise `script` with
     /// `fallbackParameterLines` appended under a comment header.
-    internal static func augment(_ script: String, fallbackParameterLines: [String]) -> String {
+    internal static func augment(script: String, fallbackParameterLines: [String]) -> String {
         guard !fallbackParameterLines.isEmpty else { return script }
         let header = "# Fallback (macro-less) operation flags, not tracked by native shell completion:"
         return script + "\n" + ([header] + fallbackParameterLines).joined(separator: "\n") + "\n"

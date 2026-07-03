@@ -17,7 +17,7 @@ internal struct CLIGroup: Sendable {
 /// The fully-assembled, immutable command tree `CLIRegistryBuilder` builds
 /// once per `OperationCLIDriver.init`, and every computed `static var
 /// configuration`/dispatch lookup in this target reads for the scope of one
-/// `OperationCLIDriver.run(_:)` call via `CLIRuntime.current`.
+/// `OperationCLIDriver.run(arguments:)` call via `CLIRuntime.current`.
 internal struct CLIRegistry: Sendable {
     /// `RootCommand`'s own displayed name, or `nil` to fall back to
     /// ArgumentParser's own default (the type name `RootCommand` converts
@@ -59,7 +59,7 @@ internal struct CLIRegistry: Sendable {
     internal let fallbackParameterLines: [String]
 }
 
-/// The ambient home for the registry `OperationCLIDriver.run(_:)` scopes to
+/// The ambient home for the registry `OperationCLIDriver.run(arguments:)` scopes to
 /// one call: `RootCommand`/`NounNode`/`ToolNode`'s computed `static var
 /// configuration` — which ArgumentParser re-reads on every
 /// `parseAsRoot`/`completionScript`/`helpMessage` call — read `current`
@@ -72,7 +72,7 @@ internal struct CLIRegistry: Sendable {
 /// observe each other's trees, including when tests run concurrently —
 /// task-local values are scoped to the current task's call tree and never
 /// leak across sibling tasks, unlike a shared mutable global protected by a
-/// lock (which would still let two concurrent `run(_:)` calls stomp on each
+/// lock (which would still let two concurrent `run(arguments:)` calls stomp on each
 /// other's registry between the lock's release and the parse completing).
 internal enum CLIRuntime {
     @TaskLocal internal static var current: CLIRegistry?
