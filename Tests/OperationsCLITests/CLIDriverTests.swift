@@ -77,6 +77,10 @@ private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
     let id: String
     let reasonCode: Int?
     let isConfirmed: Bool
+    let confidence: Double?
+    let labels: [String]?
+    let scores: [Int]?
+    let milestonesHit: [Bool]?
 
     /// Keeps the wire-level JSON key as `confirmed` (matching the CLI flag
     /// and `ParamMeta` name) while the Swift property reads as an assertion
@@ -85,6 +89,10 @@ private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
         case id
         case reasonCode
         case isConfirmed = "confirmed"
+        case confidence
+        case labels
+        case scores
+        case milestonesHit
     }
 }
 
@@ -95,8 +103,16 @@ private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
 /// `FallbackOperationCommand` leaf. Its optional `reasonCode` (declared with
 /// a `-r` short flag) exercises the fallback leaf's integer parsing and
 /// short-flag/inline-equals spellings, and its `isConfirmed` boolean exercises
-/// the fallback leaf's flag-presence detection — all only reachable through
-/// `FallbackPayloadBuilder`, never a macro-generated `@Option`/`@Flag`.
+/// the fallback leaf's flag-presence detection. Its `confidence` exercises
+/// `FallbackPayloadBuilder`'s `.number` (`Double`) scalar conversion; its
+/// `labels`/`scores`/`milestonesHit` exercise `.array` conversion for
+/// `[String]`/`[Int]`/`[Bool]` element types via repeated flag occurrences.
+/// `relatedNoteIdGroups` is declared only in `parameterMetadata`, with no
+/// matching stored property here — a nested-array (`[[String]]`) parameter
+/// can never successfully convert (see `convertedArray`'s documented
+/// contract), so it exercises that always-omitted branch without needing a
+/// decode target. All only reachable through `FallbackPayloadBuilder`, never
+/// a macro-generated `@Option`/`@Flag`.
 private struct ArchiveNoteCLIFixture: OperationDefinition {
     typealias Context = NotesFixtureContext
     typealias Output = ArchiveNoteCLIOutput
@@ -104,6 +120,10 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
     var id: String
     var reasonCode: Int?
     var isConfirmed: Bool
+    var confidence: Double?
+    var labels: [String]?
+    var scores: [Int]?
+    var milestonesHit: [Bool]?
 
     static let verb = "archive"
     static let noun = "note"
@@ -114,6 +134,22 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
             name: "reasonCode", type: .integer, required: false, description: "Why the note was archived", short: "r"
         ),
         ParamMeta(name: "confirmed", type: .boolean, required: true, description: "Whether the archive was confirmed"),
+        ParamMeta(
+            name: "confidence", type: .number, required: false, description: "Confidence score for the archive decision"
+        ),
+        ParamMeta(
+            name: "labels", type: .array(of: .string), required: false, description: "Labels to attach to the archived note"
+        ),
+        ParamMeta(
+            name: "scores", type: .array(of: .integer), required: false, description: "Scores recorded for the archived note"
+        ),
+        ParamMeta(
+            name: "milestonesHit", type: .array(of: .boolean), required: false, description: "Which milestones were hit"
+        ),
+        ParamMeta(
+            name: "relatedNoteIdGroups", type: .array(of: .array(of: .string)), required: false,
+            description: "Nested groups of related note ids (unsupported by the CLI leaf; always omitted)"
+        ),
     ]
 
     static var generationSchema: GenerationSchema {
@@ -124,6 +160,10 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
         id = try content.value(String.self, forProperty: "id")
         reasonCode = try content.value(Int?.self, forProperty: "reasonCode")
         isConfirmed = try content.value(Bool.self, forProperty: "confirmed")
+        confidence = try content.value(Double?.self, forProperty: "confidence")
+        labels = try? content.value([String].self, forProperty: "labels")
+        scores = try? content.value([Int].self, forProperty: "scores")
+        milestonesHit = try? content.value([Bool].self, forProperty: "milestonesHit")
     }
 
     var generatedContent: GeneratedContent {
@@ -131,11 +171,31 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
         if let reasonCode {
             properties.append(("reasonCode", reasonCode))
         }
+        if let confidence {
+            properties.append(("confidence", confidence))
+        }
+        if let labels {
+            properties.append(("labels", labels))
+        }
+        if let scores {
+            properties.append(("scores", scores))
+        }
+        if let milestonesHit {
+            properties.append(("milestonesHit", milestonesHit))
+        }
         return GeneratedContent(properties: properties, uniquingKeysWith: { _, new in new })
     }
 
     func execute(in context: NotesFixtureContext) async throws -> ArchiveNoteCLIOutput {
-        ArchiveNoteCLIOutput(id: id, reasonCode: reasonCode, isConfirmed: isConfirmed)
+        ArchiveNoteCLIOutput(
+            id: id,
+            reasonCode: reasonCode,
+            isConfirmed: isConfirmed,
+            confidence: confidence,
+            labels: labels,
+            scores: scores,
+            milestonesHit: milestonesHit
+        )
     }
 }
 
@@ -338,6 +398,66 @@ private func makeMultiToolDriver() throws -> OperationCLIDriver {
         #expect(result.exitCode == 0)
         #expect(result.output.contains("\"reasonCode\":42"))
     }
+
+    @Test func fallbackLeafParsesANumberParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1", "--confidence", "42.5"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"confidence\":42.5"))
+    }
+
+    @Test func fallbackLeafOmitsAnUnsuppliedOptionalNumberParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("confidence") == false)
+    }
+
+    @Test func fallbackLeafParsesARepeatedStringArrayParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(
+            arguments: ["note", "archive", "--id", "note-1", "--labels", "urgent", "--labels", "reviewed"]
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"labels\":[\"urgent\",\"reviewed\"]"))
+    }
+
+    @Test func fallbackLeafParsesARepeatedIntegerArrayParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(
+            arguments: ["note", "archive", "--id", "note-1", "--scores", "1", "--scores", "2", "--scores", "3"]
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"scores\":[1,2,3]"))
+    }
+
+    @Test func fallbackLeafParsesARepeatedBooleanArrayParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(
+            arguments: ["note", "archive", "--id", "note-1", "--milestonesHit", "true", "--milestonesHit", "false"]
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"milestonesHit\":[true,false]"))
+    }
+
+    @Test func fallbackLeafOmitsAnUnsuppliedOptionalArrayParameter() async throws {
+        let driver = try makeSingleToolDriver()
+
+        let result = await driver.run(arguments: ["note", "archive", "--id", "note-1"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("labels") == false)
+    }
 }
 
 // MARK: - Fallback leaf direct invocation (bypassing `OperationCLIDriver`)
@@ -391,6 +511,15 @@ private func captureStandardOutput(_ body: () async throws -> Void) async throws
         }
 
         #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == expectedJSON)
+    }
+
+    @Test func nestedArrayParameterConvertsToNilAndIsOmittedFromThePayload() async throws {
+        var command = FallbackOperationCommand<ArchiveNoteCLIFixture>()
+        command.rawArguments = ["--id", "note-1", "--relatedNoteIdGroups", "a", "--relatedNoteIdGroups", "b"]
+
+        let payloadJSON = command.operationPayload().jsonString
+
+        #expect(payloadJSON.contains("relatedNoteIdGroups") == false)
     }
 }
 

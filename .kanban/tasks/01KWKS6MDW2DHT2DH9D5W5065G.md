@@ -1,6 +1,29 @@
 ---
-position_column: todo
-position_ordinal: 8a80
+comments:
+- actor: wballard
+  id: 01kwm5m2behg5retv3pgj1gchg
+  text: |-
+    Implemented. Extended `ArchiveNoteCLIFixture`/`ArchiveNoteCLIOutput` in Tests/OperationsCLITests/CLIDriverTests.swift with:
+    - `confidence: Double?` (.number) — covers the `.number` case in `convertedScalarOrArray`.
+    - `labels: [String]?` (.array(of: .string)), `scores: [Int]?` (.array(of: .integer)), `milestonesHit: [Bool]?` (.array(of: .boolean)) — cover `convertedArray`'s `.string`/`.integer`/`.boolean` branches and `convertedIfEveryElementParses`, all via repeated flag occurrences.
+    - `relatedNoteIdGroups` — declared only in `parameterMetadata` (type `.array(of: .array(of: .string))`), deliberately with no matching stored property since a nested array can never successfully convert — covers `convertedArray`'s `case .array: return nil` branch.
+
+    Added CLI-driver round-trip tests to `CLIDriverFallbackLeafTests`: fallbackLeafParsesANumberParameter, fallbackLeafOmitsAnUnsuppliedOptionalNumberParameter, fallbackLeafParsesARepeatedStringArrayParameter, fallbackLeafParsesARepeatedIntegerArrayParameter, fallbackLeafParsesARepeatedBooleanArrayParameter, fallbackLeafOmitsAnUnsuppliedOptionalArrayParameter. Added a direct-invocation test to `FallbackOperationCommandRunTests`: nestedArrayParameterConvertsToNilAndIsOmittedFromThePayload (checks `operationPayload().jsonString` directly, since the nested field never reaches the decode/execute pipeline).
+
+    Note: initially made `labels`/`scores`/`milestonesHit` on `ArchiveNoteCLIOutput` non-optional (defaulting via `?? []`, mirroring `AddNoteCLIOutput.tags`), which broke `fallbackLeafOmitsAnUnsuppliedOptionalArrayParameter` — JSONEncoder emits `"labels":[]` instead of omitting a non-optional array. Fixed by making them Optional (matching the existing `reasonCode`/`confidence` omission pattern), which both fixed the test and made it a more precise check of the actual omission contract.
+
+    No boolean bare-adjective naming issue: the only new field close to boolean-shaped is `milestonesHit: [Bool]?`, which is an array (not a scalar Bool), named as a plural noun phrase consistent with `labels`/`scores`, not a bare adjective — the existing `isConfirmed`/`confirmed` convention doesn't apply to array types the same way in this codebase.
+
+    No reserved-name collisions (none of the new names normalize to "op").
+
+    Verification: `swift build` (clean, after `rm -rf .build`) — zero warnings, "Build complete!". `swift test` — exit code 0, 0 `✘` markers, all four test targets report "passed" (72+30+43+22 = 167 tests total).
+
+    Did not modify Sources/OperationsCLI/FallbackOperationCommand.swift — coverage-only change per task scope. No unrelated pre-existing issues found worth filing separately.
+
+    Leaving task in `doing` for review per /implement convention.
+  timestamp: 2026-07-03T14:20:17.134263+00:00
+position_column: doing
+position_ordinal: '80'
 title: Add tests for FallbackPayloadBuilder's number and array parameter conversion
 ---
 Sources/OperationsCLI/FallbackOperationCommand.swift:160-212

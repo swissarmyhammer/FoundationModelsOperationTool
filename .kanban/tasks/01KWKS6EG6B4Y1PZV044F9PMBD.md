@@ -31,8 +31,8 @@ comments:
   id: 01kwm4q3p47er4pyx72rhc0neg
   text: 'Round-2 verification (independent, by test agent): clean-rebuilt `.build`, ran `swift build` (exit 0, zero warnings) and `swift test` (exit 0, zero warnings, zero failures). Test run breakdown: 72 tests/6 suites + 30 tests/3 suites + 36 tests/9 suites + 22 tests/4 suites = 160 tests total, all passed. Confirmed `FallbackOperationCommandRunTests.runPrintsTheSameJSONOperationPayloadWouldProduce` (which exercises `ArchiveNoteCLIFixture`/`ArchiveNoteCLIOutput` and the `isConfirmed` -> `"confirmed"` CodingKeys wire mapping) is present and passing. No production code changes were needed.'
   timestamp: 2026-07-03T14:04:28.228811+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9280'
 title: Add tests for FallbackPayloadBuilder's boolean flags, inline =value, and short-flag argument parsing
 ---
 Sources/OperationsCLI/FallbackOperationCommand.swift:106-147
@@ -80,3 +80,16 @@ Retracted 2026-07-03: the sole finding recorded here (`CLIDriverTests.swift:164`
 Both findings fixed: renamed `confirmed` → `isConfirmed` in both `ArchiveNoteCLIOutput` (with an explicit `CodingKeys` mapping `isConfirmed` to the wire-level JSON key `"confirmed"`) and `ArchiveNoteCLIFixture` (Swift property only — `ParamMeta.name`, the CLI flag `--confirmed`, and the `generatedContent`/`init(_:)` wire-level string literals all stay `"confirmed"`, since `ParamMeta.name` already is the wire-name/property-name split point). Updated `init(_ content:)`, `generatedContent`, and `execute(in:)` references accordingly. The four tests added by this task's commit (`fallbackLeafBooleanFlagPresenceSetsTheFieldTrue`, `fallbackLeafBooleanFlagAbsenceLeavesTheFieldFalse`, and the two inline-equals/short-flag tests) needed no assertion changes — they assert on the wire-level `--confirmed` flag and `"confirmed"` JSON key, which are unchanged.
 
 Verification: `swift build` clean (zero warnings, exit 0). `swift test` all green — 72+30+36+22 = 160 tests across 4 batches, zero failures, zero warnings.
+
+## Review Findings (2026-07-03 09:06)
+
+Scope: `HEAD~1..HEAD` (checkpoint commit 93fc436, "refactor(tests): rename confirmed to isConfirmed with wire-name mapping").
+
+Retracted 2026-07-03: all 4 findings from this pass targeted pre-existing test code not touched by this checkpoint's commit (verified via `git diff HEAD~1..HEAD -- Tests/OperationsCLITests/CLIDriverTests.swift` — the diff only touches `ArchiveNoteCLIOutput`/`ArchiveNoteCLIFixture`'s `confirmed`→`isConfirmed` rename, around lines 79-135). The findings below concern `AddNoteCLIFixture`/`AddNoteCLIOutput`'s `pinned`/`urgent` Boolean properties (lines 18, 19, 39, 43), which predate this checkpoint and are unrelated to its diff — the same category of pre-existing-code finding already dropped in the 08:50 pass above. Per the "never refactor existing tests" exception (and the instruction to scope this review to the checkpoint delta only), dropped as out-of-scope; not yet tracked separately.
+
+- `Tests/OperationsCLITests/CLIDriverTests.swift:18` — Boolean property `pinned` is a bare adjective; non-mutating Boolean members must read as assertions per the naming convention shown elsewhere in this file. Rename to `isPinned`. If the wire format must remain `pinned`, add a `CodingKeys` mapping like the one at lines 79–83.
+- `Tests/OperationsCLITests/CLIDriverTests.swift:19` — Boolean property `urgent` is a bare adjective; non-mutating Boolean members must read as assertions per the naming convention shown elsewhere in this file. Rename to `isUrgent`. If the wire format must remain `urgent`, add a `CodingKeys` mapping like the one at lines 79–83.
+- `Tests/OperationsCLITests/CLIDriverTests.swift:39` — Boolean property `pinned` is a bare adjective; non-mutating Boolean members must read as assertions per the naming convention shown elsewhere in this file. Rename to `isPinned`.
+- `Tests/OperationsCLITests/CLIDriverTests.swift:43` — Boolean property `urgent` is a bare adjective; non-mutating Boolean members must read as assertions per the naming convention shown elsewhere in this file. Rename to `isUrgent`.
+
+No in-scope findings for this checkpoint delta. All prior checklist items are checked.
