@@ -107,7 +107,7 @@ private struct FixtureDecodingError: Error {}
 /// (so `resolveParameters` reports no missing parameters), but whose
 /// `init(_:)` unconditionally throws — exercising `AnyOperation.run`'s
 /// `OperationError.decodingFailed` path independent of parameter presence.
-private struct DecodingFailureToolFixture: OperationDefinition {
+private struct DecodingFailureToolFixture: OperationDefinition, Sendable {
     typealias Context = ToolFixtureContext
     typealias Output = DecodingFailureOutput
 

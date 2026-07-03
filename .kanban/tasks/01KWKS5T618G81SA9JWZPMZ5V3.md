@@ -13,27 +13,21 @@ comments:
 
     Leaving task in doing for review, per /implement workflow (not moving to review myself).
   timestamp: 2026-07-03T12:02:23.770374+00:00
+- actor: wballard
+  id: 01kwkyg8aks5726pttztk2zw7t
+  text: |-
+    Fixed the review finding: added explicit `Sendable` to `DecodingFailureToolFixture` (Tests/OperationsTests/OperationToolTests.swift) — `private struct DecodingFailureToolFixture: OperationDefinition, Sendable {`. Checked off the finding item on the task description checklist.
+
+    Verification (clean, fresh):
+    - `rm -rf .build && swift build` — clean, zero warnings.
+    - `swift test` — all 4 targets green: 71+30+27+22 = 150 tests, zero failures.
+
+    Adversarial double-check (PASS, no blocking findings). One non-blocking note it surfaced worth recording: `OperationDefinition` already inherits from `Sendable` (`public protocol OperationDefinition: Generable, Sendable` in Sources/Operations/OperationDefinition.swift), so every conforming type — including `DecodingFailureToolFixture` before this fix, and sibling fixtures `AddNoteToolFixture`/`DeleteNoteToolFixture` which still lack the explicit annotation — was already required by the compiler to be `Sendable`. The explicit `, Sendable` is therefore redundant with the protocol's own constraint; it doesn't add a new safety guarantee, just documents parity with `DecodingFailureOutput`'s explicit annotation. Applying the fix as literally requested by the finding since it's harmless and improves readability/consistency; did not extend it to the sibling fixtures (out of this finding's scope).
+
+    Leaving task in doing for review, per /implement workflow.
+  timestamp: 2026-07-03T12:15:52.147874+00:00
 position_column: doing
 position_ordinal: '80'
 title: Add test for OperationTool.call's decodingFailed corrective-return path
 ---
-Sources/Operations/OperationTool.swift:123-140 (specifically 137-139)
-
-Coverage: 96.4% (53/55 lines)
-
-Uncovered lines: 138-139:
-
-```swift
-public func call(arguments: GeneratedContent) async throws -> String {
-    ...
-    do {
-        let json = try await operation.run(resolution.content, context)
-        await retryState.reset()
-        return json
-    } catch OperationError.decodingFailed {
-        return await recordCorrective(OperationError.decodingFailed.description)
-    }
-}
-```
-
-This is a core, documented part of plan.md's "Error handling — return, don't throw" contract: when the resolved payload passes parameter resolution but still fails to decode into the target operation's typed representation (`OperationDefinition.init(_:)` throws), `OperationTool.call` must catch `OperationError.decodingFailed` from `AnyOperation.run` and return a corrective string rather than throwing — so the model can retry within the turn. This path is currently completely untested. Add a test with a fixture operation whose `init(_:)` deliberately throws on a resolvable-but-malformed payload, and assert `call(arguments:)` returns the corrective text (not a thrown error).
+Sources/Operations/OperationTool.swift:123-140 (specifically 137-139)\n\nCoverage: 96.4% (53/55 lines)\n\nUncovered lines: 138-139:\n\n```swift\npublic func call(arguments: GeneratedContent) async throws -> String {\n    ...\n    do {\n        let json = try await operation.run(resolution.content, context)\n        await retryState.reset()\n        return json\n    } catch OperationError.decodingFailed {\n        return await recordCorrective(OperationError.decodingFailed.description)\n    }\n}\n```\n\nThis is a core, documented part of plan.md's \"Error handling — return, don't throw\" contract: when the resolved payload passes parameter resolution but still fails to decode into the target operation's typed representation (`OperationDefinition.init(_:)` throws), `OperationTool.call` must catch `OperationError.decodingFailed` from `AnyOperation.run` and return a corrective string rather than throwing — so the model can retry within the turn. This path is currently completely untested. Add a test with a fixture operation whose `init(_:)` deliberately throws on a resolvable-but-malformed payload, and assert `call(arguments:)` returns the corrective text (not a thrown error).\n\n## Review Findings (2026-07-03 07:06)\n\n- [x] `Tests/OperationsTests/OperationToolTests.swift:115` — DecodingFailureToolFixture crosses async task boundaries but lacks explicit Sendable conformance; inconsistent with explicit Sendable on DecodingFailureOutput (line 102). Add `: Sendable` to the declaration: `private struct DecodingFailureToolFixture: OperationDefinition, Sendable {`.
