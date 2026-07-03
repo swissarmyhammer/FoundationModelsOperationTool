@@ -48,8 +48,8 @@ comments:
   timestamp: 2026-07-03T05:33:55.830127+00:00
 depends_on:
 - 01KWHQF34NAPP22345P7GMWY2P
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8880'
 title: 'Docs: README + DocC on public API, record design departures'
 ---
 ## What
