@@ -162,13 +162,14 @@ public struct OperationCLIDriver: Sendable {
     /// `--generate-completion-script=zsh` form.
     private static func generateCompletionScriptShellArgument(in arguments: [String]) -> String? {
         let flagName = "--generate-completion-script"
+        let inlinePrefix = "\(flagName)="
         for (index, argument) in arguments.enumerated() {
             if argument == flagName {
                 let nextIndex = index + 1
                 return nextIndex < arguments.count ? arguments[nextIndex] : nil
             }
-            if let inlineValue = argument.droppingPrefix("\(flagName)=") {
-                return inlineValue
+            if argument.hasPrefix(inlinePrefix) {
+                return String(argument.dropFirst(inlinePrefix.count))
             }
         }
         return nil
@@ -186,13 +187,5 @@ internal enum FallbackCompletionAugmenter {
         guard !fallbackParameterLines.isEmpty else { return script }
         let header = "# Fallback (macro-less) operation flags, not tracked by native shell completion:"
         return script + "\n" + ([header] + fallbackParameterLines).joined(separator: "\n") + "\n"
-    }
-}
-
-extension String {
-    /// `self` with `prefix` removed, or `nil` if `self` doesn't start with
-    /// `prefix`.
-    fileprivate func droppingPrefix(_ prefix: String) -> String? {
-        hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
     }
 }

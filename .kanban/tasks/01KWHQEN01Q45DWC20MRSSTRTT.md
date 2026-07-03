@@ -46,6 +46,22 @@ comments:
 
     Leaving the task in `doing` per the implement workflow (not moving to review).
   timestamp: 2026-07-03T02:47:37.119004+00:00
+- actor: wballard
+  id: 01kwjyytbcgecthyce4t7rg1yv
+  text: |-
+    Addressed both review findings:
+
+    1. `FallbackOperationCommand.swift` — verified `convertedScalarOrArray`'s `.boolean` case is truly unreachable by tracing the sole call site: `convertedValue` returns early via `if parameter.type == .boolean { return collected.flags.contains(parameter.name) }` before ever calling `convertedScalarOrArray`, and there is no other call site (confirmed by grep). Replaced the dead `case .boolean: return nil` with `preconditionFailure(...)` documenting the invariant (kept the switch exhaustive over `ParamType` rather than reaching for `default:`, which would silently swallow any future case ArgumentParser gains) plus a doc comment on the function noting `type` is never `.boolean` here.
+    2. `OperationCLIDriver.swift` — inlined the single-call-site `String.droppingPrefix(_:)` extension directly into `generateCompletionScriptShellArgument` (`hasPrefix`/`dropFirst` on a precomputed `inlinePrefix` local) and removed the extension.
+
+    Verification: `rm -rf .build && swift build` — clean, 0 warnings. `swift test` — all 3 targets green (46 + 30 + 27 = 103 tests, 0 failures).
+
+    Leaving in `doing` per implement workflow.
+  timestamp: 2026-07-03T03:04:34.924097+00:00
+- actor: wballard
+  id: 01kwjz2ag9kkrzyvw3wj26rqp9
+  text: 'really-done verification: fresh `rm -rf .build && swift build` (exit 0, 0 warnings) and `swift test` (exit 0, 0 failures, 103 tests across 3 targets). Adversarial double-check agent returned PASS — confirmed the `.boolean` case is genuinely unreachable (sole call site, private function), the inlined `droppingPrefix` replacement is byte-for-byte behavior-equivalent and covered by `inlineEqualsShellFormIsAccepted`, and no orphaned references/imports/blank lines remain. Both checklist items checked off. Task remains in `doing`, ready for `/review`.'
+  timestamp: 2026-07-03T03:06:29.769435+00:00
 depends_on:
 - 01KWHQCVGNFHVT0ZKEDAG802RR
 - 01KWHQQNZ644BZC5G1M4XGV0J0
@@ -54,24 +70,4 @@ position_column: doing
 position_ordinal: '80'
 title: 'CLI driver: ArgumentParser runtime registry, noun nodes, completions'
 ---
-## What
-`Sources/OperationsCLI/OperationCLIDriver.swift` (+ `Registry.swift`, `NounNode.swift`) per plan.md "Dual-use CLI":
-- freeze-once registry: `Mutex`-guarded set-then-seal before first parse; populated from one or more `OperationTool`s' operations grouped verb-command-metatypes-by-noun
-- generic `NounNode<Rep>` intermediate command whose computed `static configuration` reads the registry (`CommandConfiguration(commandName: Rep.noun, subcommands: ...)`); instantiate one per noun via opened existentials
-- root command with computed `static configuration`; multi-tool grammar `<exe> <tool> <noun> <verb>`, tool level collapses with exactly one tool; duplicate tool names rejected at init
-- startup assertion pass (duplicate names, malformed tree); correct `tool noun verb` help prefixes via `_superCommandName` or explicit `usage:`
-- fallback leaf synthesis from `ParamMeta` for manually-conformed (macro-less) operations
-- JSON output printing, exit codes; leaf `run()` payloads flow through the identical `AnyOperation.run` dispatch path as model calls
-
-## Acceptance Criteria
-- [ ] `notes note add --title Hi --tags a --tags b` executes AddNote and prints its JSON
-- [ ] `--generate-completion-script zsh` output contains every noun, verb, and flag from a runtime-assembled registry — including the macro-less fallback leaf
-- [ ] `--help` at root/noun/verb levels shows correct prefixes and descriptions from @Guide text
-- [ ] The hand-conformed (macro-less) fixture op from the core-types task appears in `--help` and parses via the synthesized fallback leaf, converging on the same resolver-accepted payload
-
-## Tests
-- [ ] `Tests/OperationsCLITests/CLIDriverTests.swift` — argv→payload round-trip equals resolver-accepted payload (convergence contract) incl. `--opt=value`, combined short flags, repeated options, `--`; help snapshots at three levels; completion-script content assertions; multi-tool grammar (two tools ⇒ tool level, one ⇒ collapsed; duplicate names rejected); macro-less fallback leaf round-trip + help/completions presence; unknown noun/verb yields did-you-mean; missing required and bad-int errors
-- [ ] Run `swift test --filter CLIDriverTests`; all pass
-
-## Workflow
-- Use `/tdd` — write failing tests first, then implement to make them pass.
+## What\n`Sources/OperationsCLI/OperationCLIDriver.swift` (+ `Registry.swift`, `NounNode.swift`) per plan.md \"Dual-use CLI\":\n- freeze-once registry: `Mutex`-guarded set-then-seal before first parse; populated from one or more `OperationTool`s' operations grouped verb-command-metatypes-by-noun\n- generic `NounNode<Rep>` intermediate command whose computed `static configuration` reads the registry (`CommandConfiguration(commandName: Rep.noun, subcommands: ...)`); instantiate one per noun via opened existentials\n- root command with computed `static configuration`; multi-tool grammar `<exe> <tool> <noun> <verb>`, tool level collapses with exactly one tool; duplicate tool names rejected at init\n- startup assertion pass (duplicate names, malformed tree); correct `tool noun verb` help prefixes via `_superCommandName` or explicit `usage:`\n- fallback leaf synthesis from `ParamMeta` for manually-conformed (macro-less) operations\n- JSON output printing, exit codes; leaf `run()` payloads flow through the identical `AnyOperation.run` dispatch path as model calls\n\n## Acceptance Criteria\n- [ ] `notes note add --title Hi --tags a --tags b` executes AddNote and prints its JSON\n- [ ] `--generate-completion-script zsh` output contains every noun, verb, and flag from a runtime-assembled registry — including the macro-less fallback leaf\n- [ ] `--help` at root/noun/verb levels shows correct prefixes and descriptions from @Guide text\n- [ ] The hand-conformed (macro-less) fixture op from the core-types task appears in `--help` and parses via the synthesized fallback leaf, converging on the same resolver-accepted payload\n\n## Tests\n- [ ] `Tests/OperationsCLITests/CLIDriverTests.swift` — argv→payload round-trip equals resolver-accepted payload (convergence contract) incl. `--opt=value`, combined short flags, repeated options, `--`; help snapshots at three levels; completion-script content assertions; multi-tool grammar (two tools ⇒ tool level, one ⇒ collapsed; duplicate names rejected); macro-less fallback leaf round-trip + help/completions presence; unknown noun/verb yields did-you-mean; missing required and bad-int errors\n- [ ] Run `swift test --filter CLIDriverTests`; all pass\n\n## Workflow\n- Use `/tdd` — write failing tests first, then implement to make them pass.\n\n## Review Findings (2026-07-02 21:50)\n\n- [x] `Sources/OperationsCLI/FallbackOperationCommand.swift:221` — The `.boolean` case in `convertedScalarOrArray` is unreachable. `convertedValue` returns early when `parameter.type == .boolean` (line 204), so this function is never called with `type: .boolean`. The `.boolean` case in `.array` recursion is handled in `convertedArray`, not here. Delete the unreachable `case .boolean: return nil` branch at lines 221–222.\n- [x] `Sources/OperationsCLI/OperationCLIDriver.swift:206` — The `droppingPrefix(_:)` helper wraps a single call site and adds no meaningful abstraction—it's pure indirection without payoff. The expression `hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil` should be inlined at its sole call site with a comment if clarity is needed. Inline the expression into `generateCompletionScriptShellArgument` and remove the extension method, or add a comment to the call site explaining the intent if readability is the concern.\n

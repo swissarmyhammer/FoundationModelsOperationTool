@@ -154,6 +154,9 @@ internal enum FallbackPayloadBuilder {
 
     /// Converts `rawValues` to `type`'s Swift representation: the last
     /// occurrence for a scalar, every occurrence for an array.
+    ///
+    /// `type` is never `.boolean` here: `convertedValue` handles booleans
+    /// itself and returns before reaching this function.
     private static func convertedScalarOrArray(_ rawValues: [String], type: ParamType) -> (any ConvertibleToGeneratedContent)? {
         switch type {
         case .string:
@@ -163,7 +166,7 @@ internal enum FallbackPayloadBuilder {
         case .number:
             return convertedIfLastElementParses(rawValues, using: Double.init)
         case .boolean:
-            return nil
+            preconditionFailure("convertedValue handles .boolean before calling convertedScalarOrArray")
         case .array(let element):
             return convertedArray(rawValues, elementType: element)
         }
