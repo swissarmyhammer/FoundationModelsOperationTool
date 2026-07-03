@@ -76,7 +76,16 @@ extension DeleteNoteCLIFixture {
 private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
     let id: String
     let reasonCode: Int?
-    let confirmed: Bool
+    let isConfirmed: Bool
+
+    /// Keeps the wire-level JSON key as `confirmed` (matching the CLI flag
+    /// and `ParamMeta` name) while the Swift property reads as an assertion
+    /// per this repo's Boolean-naming convention.
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case reasonCode
+        case isConfirmed = "confirmed"
+    }
 }
 
 /// `archive note` fixture: a hand-conformed `OperationDefinition` — no
@@ -85,7 +94,7 @@ private struct ArchiveNoteCLIOutput: Encodable, Sendable, Equatable {
 /// so `NounNode`'s subcommands list mixes a macro leaf and a synthesized
 /// `FallbackOperationCommand` leaf. Its optional `reasonCode` (declared with
 /// a `-r` short flag) exercises the fallback leaf's integer parsing and
-/// short-flag/inline-equals spellings, and its `confirmed` boolean exercises
+/// short-flag/inline-equals spellings, and its `isConfirmed` boolean exercises
 /// the fallback leaf's flag-presence detection — all only reachable through
 /// `FallbackPayloadBuilder`, never a macro-generated `@Option`/`@Flag`.
 private struct ArchiveNoteCLIFixture: OperationDefinition {
@@ -94,7 +103,7 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
 
     var id: String
     var reasonCode: Int?
-    var confirmed: Bool
+    var isConfirmed: Bool
 
     static let verb = "archive"
     static let noun = "note"
@@ -114,11 +123,11 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
     init(_ content: GeneratedContent) throws {
         id = try content.value(String.self, forProperty: "id")
         reasonCode = try content.value(Int?.self, forProperty: "reasonCode")
-        confirmed = try content.value(Bool.self, forProperty: "confirmed")
+        isConfirmed = try content.value(Bool.self, forProperty: "confirmed")
     }
 
     var generatedContent: GeneratedContent {
-        var properties: [(String, any ConvertibleToGeneratedContent)] = [("id", id), ("confirmed", confirmed)]
+        var properties: [(String, any ConvertibleToGeneratedContent)] = [("id", id), ("confirmed", isConfirmed)]
         if let reasonCode {
             properties.append(("reasonCode", reasonCode))
         }
@@ -126,7 +135,7 @@ private struct ArchiveNoteCLIFixture: OperationDefinition {
     }
 
     func execute(in context: NotesFixtureContext) async throws -> ArchiveNoteCLIOutput {
-        ArchiveNoteCLIOutput(id: id, reasonCode: reasonCode, confirmed: confirmed)
+        ArchiveNoteCLIOutput(id: id, reasonCode: reasonCode, isConfirmed: isConfirmed)
     }
 }
 
