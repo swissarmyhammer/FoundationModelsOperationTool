@@ -4,26 +4,32 @@ import TestSupport
 
 /// Verifies plan.md task 8's "README examples compile" acceptance criterion:
 /// every `<!-- doc-snippet source="..." --> ``` ... ``` <!-- /doc-snippet -->`
-/// code block in the repo root's `README.md` is a genuine, contiguous excerpt
-/// of the source file it cites, not hand-written pseudocode that could drift
-/// out of sync with what actually compiles.
+/// code block in the repo root's `README.md` or `docs/GUIDE.md` is a genuine,
+/// contiguous excerpt of the source file it cites, not hand-written
+/// pseudocode that could drift out of sync with what actually compiles. The
+/// declare/fuse/serve/CLI walkthrough spans both files: `README.md` keeps
+/// only the "declare an operation" example as the landing page's single
+/// worked example, while `docs/GUIDE.md` carries the fuse/serve/CLI stages.
 ///
 /// Placed in `NotesToolTests` (rather than `OperationsTests`, alongside
-/// `DocCoverageTests.swift`) because every README snippet is cited from
+/// `DocCoverageTests.swift`) because every snippet is cited from
 /// `Examples/NotesTool` — the worked example this test suite already covers
 /// end to end.
 @Suite("README code-snippet provenance")
 struct ReadmeSnippetTests {
-    @Test("every README code snippet is a real, contiguous excerpt of its cited source file")
-    func everySnippetIsARealContiguousExcerptOfItsSource() throws {
-        let snippets = try ReadmeSnippets.parse(readmeContents())
-        #expect(!snippets.isEmpty, "expected README.md to contain at least one <!-- doc-snippet --> block")
+    /// The doc-snippet-bearing markdown files, relative to the package root.
+    private static let docFiles = ["README.md", "docs/GUIDE.md"]
+
+    @Test("every doc-snippet code block is a real, contiguous excerpt of its cited source file", arguments: docFiles)
+    func everySnippetIsARealContiguousExcerptOfItsSource(docFile: String) throws {
+        let snippets = try ReadmeSnippets.parse(fileContents(relativePath: docFile))
+        #expect(!snippets.isEmpty, "expected \(docFile) to contain at least one <!-- doc-snippet --> block")
 
         for snippet in snippets {
             let sourceLines = try sourceFileLines(relativePath: snippet.sourcePath)
             #expect(
                 ReadmeSnippets.isContiguousExcerpt(snippet.code, of: sourceLines),
-                Comment(rawValue: "README snippet citing '\(snippet.sourcePath)' is not a contiguous excerpt of that file")
+                Comment(rawValue: "\(docFile) snippet citing '\(snippet.sourcePath)' is not a contiguous excerpt of that file")
             )
         }
     }
@@ -35,10 +41,13 @@ struct ReadmeSnippetTests {
         }
     }
 
-    @Test("the README documents all four declare/fuse/serve/CLI stages from real NotesTool source")
-    func readmeDocumentsAllFourStages() throws {
-        let snippets = try ReadmeSnippets.parse(readmeContents())
-        let sourcePaths = Set(snippets.map(\.sourcePath))
+    @Test("the README and guide together document all four declare/fuse/serve/CLI stages from real NotesTool source")
+    func docsDocumentAllFourStages() throws {
+        var sourcePaths: Set<String> = []
+        for docFile in Self.docFiles {
+            let snippets = try ReadmeSnippets.parse(fileContents(relativePath: docFile))
+            sourcePaths.formUnion(snippets.map(\.sourcePath))
+        }
 
         #expect(sourcePaths.contains("Examples/NotesTool/Sources/NotesToolCore/AddNote.swift"))
         #expect(sourcePaths.contains("Examples/NotesTool/Sources/NotesToolCore/NotesTool.swift"))
@@ -46,8 +55,8 @@ struct ReadmeSnippetTests {
         #expect(sourcePaths.contains("Examples/NotesTool/Sources/notes/NotesToolMain.swift"))
     }
 
-    private func readmeContents() throws -> String {
-        try String(contentsOf: packageRoot().appendingPathComponent("README.md"), encoding: .utf8)
+    private func fileContents(relativePath: String) throws -> String {
+        try String(contentsOf: packageRoot().appendingPathComponent(relativePath), encoding: .utf8)
     }
 
     private func sourceFileLines(relativePath: String) throws -> [String] {
