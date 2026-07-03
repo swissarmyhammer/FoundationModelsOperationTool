@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 /// Verifies plan.md task 8's "README examples compile" acceptance criterion:
 /// every `<!-- doc-snippet source="..." --> ``` ... ``` <!-- /doc-snippet -->`
@@ -52,7 +53,9 @@ struct ReadmeSnippetTests {
     private func sourceFileLines(relativePath: String) throws -> [String] {
         let root = packageRoot()
         let fileURL = root.appendingPathComponent(relativePath)
-        try requireWithinPackageRoot(fileURL, root: root)
+        try PackageRootValidation.requireWithinPackageRoot(fileURL, root: root) {
+            PathEscapesPackageRoot(path: $0)
+        }
         let contents = try String(contentsOf: fileURL, encoding: .utf8)
         return contents.components(separatedBy: "\n")
     }
@@ -62,19 +65,6 @@ struct ReadmeSnippetTests {
     private struct PathEscapesPackageRoot: Error, CustomStringConvertible {
         let path: String
         var description: String { "'\(path)' resolves outside the package root" }
-    }
-
-    /// Guards against `relativePath` (via `..` or similar) resolving `url`
-    /// outside `root`.
-    ///
-    /// - Throws: `PathEscapesPackageRoot` if `url`'s standardized path isn't
-    ///   `root`'s standardized path or a descendant of it.
-    private func requireWithinPackageRoot(_ url: URL, root: URL) throws {
-        let standardizedURL = url.standardizedFileURL.path
-        let standardizedRoot = root.standardizedFileURL.path
-        guard standardizedURL == standardizedRoot || standardizedURL.hasPrefix(standardizedRoot + "/") else {
-            throw PathEscapesPackageRoot(path: standardizedURL)
-        }
     }
 
     /// The package root directory, derived from this file's own path: four

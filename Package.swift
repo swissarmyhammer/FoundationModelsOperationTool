@@ -59,6 +59,7 @@ let package = Package(
             name: "OperationsTests",
             dependencies: [
                 "Operations",
+                "TestSupport",
                 // `DocCoverageTests.swift` parses `Sources/Operations` and
                 // `Sources/OperationsCLI` with SwiftSyntax to enforce doc
                 // coverage on every public declaration.
@@ -104,8 +105,18 @@ let package = Package(
         ),
         .testTarget(
             name: "NotesToolTests",
-            dependencies: ["NotesToolCore", "Operations", "OperationsCLI"],
+            dependencies: ["NotesToolCore", "Operations", "OperationsCLI", "TestSupport"],
             path: "Examples/NotesTool/Tests/NotesToolTests"
+        ),
+
+        // Test-only support code shared across test targets in different
+        // SwiftPM modules (`OperationsTests`, `NotesToolTests`). A plain
+        // library target, not a test target, since SwiftPM test targets
+        // don't depend on one another — this is the standard idiom for
+        // sharing test helpers across otherwise-independent test modules.
+        .target(
+            name: "TestSupport",
+            path: "Tests/TestSupport"
         ),
     ]
 )

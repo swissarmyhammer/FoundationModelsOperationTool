@@ -21,6 +21,31 @@ comments:
 
     Leaving in `doing` for `/review`.
   timestamp: 2026-07-03T05:15:45.576002+00:00
+- actor: wballard
+  id: 01kwk7g97pjbza7rsas8zsnnt8
+  text: |-
+    Fixed the review finding: extracted the duplicated `requireWithinPackageRoot()` logic (identical in ReadmeSnippetTests.swift and DocCoverageTests.swift, differing only in thrown error type) into a genuinely shared location, superseding the earlier self-review's "no shared test-support module exists" rejection.
+
+    **New target**: `TestSupport` — a plain SwiftPM `.target` (not `.testTarget`, since test targets can't depend on one another) at `Tests/TestSupport/PackageRootValidation.swift`, containing:
+    ```swift
+    public enum PackageRootValidation {
+        public static func requireWithinPackageRoot<E: Error>(
+            _ url: URL, root: URL, throwing onEscape: (String) -> E
+        ) throws { ... }
+    }
+    ```
+    The differing error type is handled via a generic caller-supplied closure, as the finding suggested.
+
+    **Package.swift**: added the `TestSupport` target, and added it as a dependency of both `OperationsTests` and `NotesToolTests`.
+
+    **DocCoverageTests.swift**: `DocCoverageScanner.scan(directory:)` now calls `PackageRootValidation.requireWithinPackageRoot(directoryURL, root: root) { ScanError.pathEscapesPackageRoot($0) }`; the private duplicate method was deleted.
+
+    **ReadmeSnippetTests.swift**: `sourceFileLines(relativePath:)` now calls `PackageRootValidation.requireWithinPackageRoot(fileURL, root: root) { PathEscapesPackageRoot(path: $0) }`; the private duplicate method was deleted. The local `PathEscapesPackageRoot` error struct and each file's own `packageRoot()` helper (different relative depth per file) were deliberately left in place — the finding was specifically about the duplicated validation function body, not the error types or the root-finding helpers.
+
+    Verified: `rm -rf .build && swift build` — clean, zero warnings. `swift test` — all 4 test targets green, same 137 tests as before (59 + 30 + 27 + 21), 0 failures, including both escape-rejection regression tests (`scanningADirectoryOutsideThePackageRootThrows`, `sourcePathOutsideThePackageRootIsRejected`). Adversarial double-check agent independently confirmed: target wiring correct, duplication genuinely eliminated (not relocated in a different form), no lingering duplicate copies elsewhere in the repo, build/test clean, no scope creep. Verdict: PASS.
+
+    Both checklist items for this finding are now checked off. Leaving in `doing` for `/review`.
+  timestamp: 2026-07-03T05:33:55.830127+00:00
 depends_on:
 - 01KWHQF34NAPP22345P7GMWY2P
 position_column: doing
@@ -42,3 +67,8 @@ Per plan.md task 8: `README.md` walking declare → fuse → serve → CLI in fo
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-03 00:22)
+
+- [x] `Examples/NotesTool/Tests/NotesToolTests/ReadmeSnippetTests.swift:71` — The `requireWithinPackageRoot()` function duplicates nearly identical logic from `DocCoverageTests.swift:176`. Both implement identical path validation (standardization and prefix checking), differing only in error type. Identical validation logic across test files means fixes must happen in two places. Extract the shared path validation logic into a single location (e.g., a test utility or extension on URL) that both call sites reuse, parameterizing the error type or wrapping each error type at the call site.
+- [x] `Tests/OperationsTests/DocCoverageTests.swift:176` — The `requireWithinPackageRoot()` function duplicates nearly identical logic from `ReadmeSnippetTests.swift:71`. Both implement identical path validation (standardization and prefix checking), differing only in error type. Identical validation logic across test files means fixes must happen in two places. Extract the shared path validation logic into a single location (e.g., a test utility or extension on URL) that both call sites reuse, parameterizing the error type or wrapping each error type at the call site.

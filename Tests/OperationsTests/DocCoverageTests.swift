@@ -2,6 +2,7 @@ import Foundation
 import SwiftParser
 import SwiftSyntax
 import Testing
+import TestSupport
 
 /// Enforces plan.md task 8's "DocC comments on public API" requirement:
 /// every `public` declaration in `Sources/Operations` and
@@ -88,7 +89,9 @@ enum DocCoverageScanner {
     static func scan(directory: String) throws -> [Violation] {
         let root = packageRoot()
         let directoryURL = root.appendingPathComponent(directory)
-        try requireWithinPackageRoot(directoryURL, root: root)
+        try PackageRootValidation.requireWithinPackageRoot(directoryURL, root: root) {
+            ScanError.pathEscapesPackageRoot($0)
+        }
         let files =
             try FileManager.default
             .contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: nil)
@@ -119,19 +122,6 @@ enum DocCoverageScanner {
             .deletingLastPathComponent()  // DocCoverageTests.swift -> OperationsTests/
             .deletingLastPathComponent()  // OperationsTests/ -> Tests/
             .deletingLastPathComponent()  // Tests/ -> package root
-    }
-
-    /// Guards against `directory` (via `..` or similar) resolving `url`
-    /// outside `root`.
-    ///
-    /// - Throws: `ScanError.pathEscapesPackageRoot` if `url`'s standardized
-    ///   path isn't `root`'s standardized path or a descendant of it.
-    private static func requireWithinPackageRoot(_ url: URL, root: URL) throws {
-        let standardizedURL = url.standardizedFileURL.path
-        let standardizedRoot = root.standardizedFileURL.path
-        guard standardizedURL == standardizedRoot || standardizedURL.hasPrefix(standardizedRoot + "/") else {
-            throw ScanError.pathEscapesPackageRoot(standardizedURL)
-        }
     }
 }
 
