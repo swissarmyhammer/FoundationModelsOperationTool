@@ -78,5 +78,27 @@ let package = Package(
             name: "OperationsCLITests",
             dependencies: ["OperationsCLI"]
         ),
+
+        // Example: a "notes" tool exercising the full stack end to end —
+        // the `@Operation` macro, schema fusion, `OperationTool` dispatch,
+        // and the CLI driver. Split into a library (`NotesToolCore`, so its
+        // operations and `OperationTool` factory are `@testable`) and a thin
+        // executable (`notes`) per plan.md's task 7, since SwiftPM does not
+        // allow a test target to import an executable target's main module.
+        .target(
+            name: "NotesToolCore",
+            dependencies: ["Operations"],
+            path: "Examples/NotesTool/Sources/NotesToolCore"
+        ),
+        .executableTarget(
+            name: "notes",
+            dependencies: ["NotesToolCore", "Operations", "OperationsCLI"],
+            path: "Examples/NotesTool/Sources/notes"
+        ),
+        .testTarget(
+            name: "NotesToolTests",
+            dependencies: ["NotesToolCore", "Operations", "OperationsCLI"],
+            path: "Examples/NotesTool/Tests/NotesToolTests"
+        ),
     ]
 )

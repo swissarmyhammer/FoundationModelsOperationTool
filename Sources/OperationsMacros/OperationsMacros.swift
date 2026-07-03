@@ -844,6 +844,11 @@ private func commandStructText(
 ) -> String {
     let fieldDeclarationsText = fields.map(commandFieldDeclarationText).joined(separator: "\n\n")
     let payloadAssignmentsText = fields.map(payloadAssignmentText).joined(separator: "\n")
+    // `fields.isEmpty` (a unit struct, or one whose only stored properties
+    // have no `Command` representation — e.g. a nested array) means no
+    // statement below ever appends to `payload`; declaring it `var` in that
+    // case would warn "variable was never mutated".
+    let payloadDeclarationKeyword = fields.isEmpty ? "let" : "var"
 
     return """
         \(accessText)struct Command: AsyncParsableCommand, OperationCommand {
@@ -857,7 +862,7 @@ private func commandStructText(
             /// parsed values, in the identical shape `AnyOperation.run`
             /// expects and the model path sends.
             \(accessText)func operationPayload() -> GeneratedContent {
-                var payload: [(String, any ConvertibleToGeneratedContent)] = [(\(swiftStringLiteral(opFieldName)), \(structTypeName).opString)]
+                \(payloadDeclarationKeyword) payload: [(String, any ConvertibleToGeneratedContent)] = [(\(swiftStringLiteral(opFieldName)), \(structTypeName).opString)]
         \(payloadAssignmentsText)
                 return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in new })
             }

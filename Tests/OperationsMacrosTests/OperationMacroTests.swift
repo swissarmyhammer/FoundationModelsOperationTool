@@ -278,7 +278,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         /// parsed values, in the identical shape `AnyOperation.run`
                         /// expects and the model path sends.
                         func operationPayload() -> GeneratedContent {
-                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", ListNotes.opString)]
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", ListNotes.opString)]
 
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
@@ -566,7 +566,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         /// parsed values, in the identical shape `AnyOperation.run`
                         /// expects and the model path sends.
                         func operationPayload() -> GeneratedContent {
-                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
 
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
@@ -624,7 +624,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         /// parsed values, in the identical shape `AnyOperation.run`
                         /// expects and the model path sends.
                         func operationPayload() -> GeneratedContent {
-                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
 
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
@@ -684,7 +684,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         /// parsed values, in the identical shape `AnyOperation.run`
                         /// expects and the model path sends.
                         func operationPayload() -> GeneratedContent {
-                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
 
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
@@ -742,7 +742,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         /// parsed values, in the identical shape `AnyOperation.run`
                         /// expects and the model path sends.
                         func operationPayload() -> GeneratedContent {
-                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
 
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
@@ -797,7 +797,7 @@ private let operationMacroSpecs: [String: MacroSpec] = [
                         /// parsed values, in the identical shape `AnyOperation.run`
                         /// expects and the model path sends.
                         func operationPayload() -> GeneratedContent {
-                            var payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
+                            let payload: [(String, any ConvertibleToGeneratedContent)] = [("op", AddNote.opString)]
 
                             return GeneratedContent(properties: payload, uniquingKeysWith: { _, new in
                                     new
