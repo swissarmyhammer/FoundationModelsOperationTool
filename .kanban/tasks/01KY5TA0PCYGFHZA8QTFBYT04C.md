@@ -17,8 +17,8 @@ comments:
   id: 01ky5vxtb9pnrnvz4w7pzz62jj
   text: 'Implemented via TDD: OperationEvent, OperationEventSink, EventEmittingTool, OperationEventSinkHolder, EventEmittingContext in Sources/Operations/. OperationTool gains conditional EventEmittingTool conformance when Context: EventEmittingContext. New test file EventEmittingToolTests.swift covers Codable round-trip, no-sink safety, no-fan-out-on-reconnect, context-copy sink sharing, and the mixed-[any Tool]-list cast-and-connect acceptance scenario. swift test: 182 tests, 0 failures, 0 warnings. Task left in doing for review.'
   timestamp: 2026-07-22T21:32:52.457952+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9880'
 title: Standard progress/completion event vocabulary and EventEmitting protocol
 ---
 ## What
