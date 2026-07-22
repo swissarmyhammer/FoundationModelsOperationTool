@@ -165,6 +165,23 @@ public struct OperationTool<Context: Sendable>: Tool {
     }
 }
 
+/// Turns `OperationTool<Context>` into an `EventEmittingTool` whenever its
+/// `Context` opts in by conforming to `EventEmittingContext`. A `Context`
+/// that doesn't conform leaves `OperationTool` with no such conformance at
+/// all, so `tool as? any EventEmittingTool` simply fails for it — there is
+/// no runtime "is this connected" flag to check separately.
+extension OperationTool: EventEmittingTool where Context: EventEmittingContext {
+    /// Connects `sink` to this tool's `context` — see
+    /// `EventEmittingContext` (the opt-in holder every operation's
+    /// `execute(in:)` posts through) and `EventEmittingTool`'s "hosts
+    /// connect, users don't" contract.
+    ///
+    /// - Parameter sink: The sink to connect.
+    public func connect(_ sink: any OperationEventSink) {
+        context.operationEventSink.connect(sink)
+    }
+}
+
 /// A thread-safe consecutive-failure counter for `OperationTool`'s retry
 /// cap.
 ///
