@@ -91,15 +91,65 @@ public struct OperationTool<Context: Sendable>: Tool {
         retryCap: Int = 2,
         includesSchemaInInstructions: Bool = true
     ) throws {
+        self.init(
+            name: name,
+            description: description,
+            parameters: try SchemaFusion.fuse(operations, name: name, description: description),
+            includesSchemaInInstructions: includesSchemaInInstructions,
+            context: context,
+            operations: operations,
+            resolver: resolver,
+            retryCap: retryCap,
+            retryState: RetryState()
+        )
+    }
+
+    /// Non-throwing internal copy path: builds a tool directly from
+    /// already-known fields, reusing an already-fused `parameters` schema
+    /// rather than rerunning `SchemaFusion.fuse` — the shared plumbing
+    /// behind `copy(context:)`, so neither `connecting(_:)` nor `forked()`
+    /// can throw or re-fuse the schema.
+    private init(
+        name: String,
+        description: String,
+        parameters: GenerationSchema,
+        includesSchemaInInstructions: Bool,
+        context: Context,
+        operations: [AnyOperation<Context>],
+        resolver: OperationResolver,
+        retryCap: Int,
+        retryState: RetryState
+    ) {
         self.name = name
         self.description = description
-        self.parameters = try SchemaFusion.fuse(operations, name: name, description: description)
+        self.parameters = parameters
+        self.includesSchemaInInstructions = includesSchemaInInstructions
         self.context = context
         self.operations = operations
         self.resolver = resolver
         self.retryCap = retryCap
-        self.includesSchemaInInstructions = includesSchemaInInstructions
-        self.retryState = RetryState()
+        self.retryState = retryState
+    }
+
+    /// Returns a copy of this tool with `context` replaced, sharing every
+    /// other field — in particular the already-fused `parameters` schema,
+    /// so neither re-runs `SchemaFusion.fuse`. The shared copy path behind
+    /// both `EventEmittingTool.connecting(_:)` and `ForkableTool.forked()`.
+    ///
+    /// - Parameter context: The replacement context.
+    /// - Returns: A copy of this tool over `context`.
+    private func copy(context: Context) -> OperationTool<Context> {
+        OperationTool(
+            name: name,
+            description: description,
+            parameters: parameters,
+            includesSchemaInInstructions: includesSchemaInInstructions,
+            context: context,
+            operations: operations,
+            resolver: resolver,
+            retryCap: retryCap,
+            retryState: retryState
+        )
     }
 
     /// Resolves `arguments` to a registered operation and dispatches to it.
@@ -171,14 +221,32 @@ public struct OperationTool<Context: Sendable>: Tool {
 /// all, so `tool as? any EventEmittingTool` simply fails for it — there is
 /// no runtime "is this connected" flag to check separately.
 extension OperationTool: EventEmittingTool where Context: EventEmittingContext {
-    /// Connects `sink` to this tool's `context` — see
-    /// `EventEmittingContext` (the opt-in holder every operation's
+    /// Returns a copy of this tool wired to post events through `sink` —
+    /// see `EventEmittingContext` (the opt-in sink every operation's
     /// `execute(in:)` posts through) and `EventEmittingTool`'s "hosts
     /// connect, users don't" contract.
     ///
-    /// - Parameter sink: The sink to connect.
-    public func connect(_ sink: any OperationEventSink) {
-        context.operationEventSink.connect(sink)
+    /// - Parameter sink: The sink the returned tool's events are posted to.
+    /// - Returns: A copy of this tool sharing `context`'s other state,
+    ///   routed to `sink`.
+    public func connecting(_ sink: any OperationEventSink) -> any Tool {
+        copy(context: context.connecting(sink))
+    }
+}
+
+/// `OperationTool` conforms to `ForkableTool` unconditionally — forking is
+/// always safe, whether or not `Context` opts into event emission: it's
+/// always the receiver's own `context`, forked if `Context` opts in via
+/// `ForkableContext`, shared unchanged otherwise.
+extension OperationTool: ForkableTool {
+    /// Returns a copy of this tool for a child session, forking `context`
+    /// if it conforms to `ForkableContext` — otherwise the same `context`,
+    /// shared unchanged (still sharing any reference-typed state it holds).
+    ///
+    /// - Returns: The forked tool instance.
+    public func forked() -> any Tool {
+        let forkedContext = (context as? any ForkableContext)?.forked() as? Context
+        return copy(context: forkedContext ?? context)
     }
 }
 
