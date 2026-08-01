@@ -62,8 +62,24 @@ comments:
     - evidence: `swift build` clean; `swift test` 194 tests / 4 suites (94+34+44+22), all passing, zero failures, zero warnings. File changed: Sources/Operations/OperationOutcome.swift (collapsed rawValue/init(rawValue:) switches into one shared `wireVocabulary` table).
     - next: leave in doing for /review.
   timestamp: 2026-08-01T14:05:28.623360+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kyythm0wchpagfb38b0nd407
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (a11bc9f "refactor(operations): unify OperationOutcome wire mapping into shared table") — 0 findings (attempted 14, confirmed 0, refuted 0, failed 0); both prior findings already checked
+    - next: task moved to done
+  timestamp: 2026-08-01T14:09:44.988259+00:00
+- actor: claude-code
+  id: 01kyythwyfw9b4ttmm98zay246
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — Sources/Operations/OperationOutcome.swift (unified rawValue/init(rawValue:) into shared wireVocabulary table)
+    - test: green — swift test, 194 passed (94+34+44+22 across 4 targets), 0 failures
+    - commit: a11bc9f
+    - review: clean — 0 findings, task moved to done
+  timestamp: 2026-08-01T14:09:54.127365+00:00
+position_column: done
+position_ordinal: 9a80
 title: 'Shared terminal-outcome vocabulary: OperationOutcome enum, outcome envelope field, terminal-event contract'
 ---
 ## Why
