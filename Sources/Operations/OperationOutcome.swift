@@ -55,17 +55,27 @@ public enum OperationOutcome: Sendable, Equatable {
     /// its original wire-format value.
     case other(String)
 
+    /// The wire-format vocabulary for every case except `.other`, defined
+    /// exactly once and consulted from both `rawValue` and
+    /// `init(rawValue:)` so the case-to-string mapping cannot drift between
+    /// the two directions.
+    private static let wireVocabulary: [(rawValue: String, outcome: OperationOutcome)] = [
+        ("succeeded", .succeeded),
+        ("failed", .failed),
+        ("timed_out", .timedOut),
+        ("stopped", .stopped),
+        ("cancelled", .cancelled),
+        ("lost", .lost),
+    ]
+
     /// The wire-format, snake_case raw string for this outcome.
     public var rawValue: String {
-        switch self {
-        case .succeeded: "succeeded"
-        case .failed: "failed"
-        case .timedOut: "timed_out"
-        case .stopped: "stopped"
-        case .cancelled: "cancelled"
-        case .lost: "lost"
-        case let .other(value): value
+        if case let .other(value) = self {
+            return value
         }
+        // Every non-`.other` case is present in `wireVocabulary`, so this
+        // lookup always succeeds; the empty-string fallback is unreachable.
+        return Self.wireVocabulary.first(where: { $0.outcome == self })?.rawValue ?? ""
     }
 
     /// Creates an outcome from its wire-format, snake_case raw string.
@@ -73,15 +83,7 @@ public enum OperationOutcome: Sendable, Equatable {
     /// Never fails: a value not recognized by this version of the package
     /// is preserved as `.other(rawValue)`.
     public init(rawValue: String) {
-        switch rawValue {
-        case "succeeded": self = .succeeded
-        case "failed": self = .failed
-        case "timed_out": self = .timedOut
-        case "stopped": self = .stopped
-        case "cancelled": self = .cancelled
-        case "lost": self = .lost
-        default: self = .other(rawValue)
-        }
+        self = Self.wireVocabulary.first(where: { $0.rawValue == rawValue })?.outcome ?? .other(rawValue)
     }
 }
 

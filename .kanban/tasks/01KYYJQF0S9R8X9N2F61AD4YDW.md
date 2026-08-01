@@ -30,6 +30,38 @@ comments:
     - evidence: `swift build` and `swift test` clean (194 tests, 4 targets, 0 failures, 0 warnings). Files: Sources/Operations/OperationOutcome.swift (new), Sources/Operations/OperationEvent.swift (outcome field + doc contract), Tests/OperationsTests/OperationOutcomeTests.swift (new), Tests/OperationsTests/EventEmittingToolTests.swift (outcome tests added).
     - next: leave in doing for /review.
   timestamp: 2026-08-01T13:49:55.117701+00:00
+- actor: claude-code
+  id: 01kyyt5qzjbr1ep5vaa6rjt62x
+  text: |-
+    ### review — findings
+    - evidence: 2 findings — Sources/Operations/OperationOutcome.swift:30, Sources/Operations/OperationOutcome.swift:45 (scope: HEAD~1..HEAD)
+    - next: implementer should collapse the rawValue/init(rawValue:) switch pairs into a single static case↔string mapping table used by both directions.
+  timestamp: 2026-08-01T14:03:15.826917+00:00
+- actor: claude-code
+  id: 01kyyt64qn51dtqwxj773xtzek
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — OperationOutcome.swift (new), OperationEvent.swift, OperationOutcomeTests.swift (new), EventEmittingToolTests.swift
+    - test: green — swift test, 194 passed, 0 failures
+    - commit: 18c1789
+    - review: findings — Sources/Operations/OperationOutcome.swift:30, Sources/Operations/OperationOutcome.swift:45 (duplicate case↔wire-string switch logic in rawValue getter and init(rawValue:), should collapse to one shared mapping table)
+  timestamp: 2026-08-01T14:03:28.885488+00:00
+- actor: claude-code
+  id: 01kyyt9r8hnnm5rb480n06b488
+  text: |-
+    Addressed both review findings in `Sources/Operations/OperationOutcome.swift`: collapsed the mirrored `rawValue` getter / `init(rawValue:)` switch statements into a single `private static let wireVocabulary: [(rawValue: String, outcome: OperationOutcome)]` array-of-tuples, defined once. `rawValue` handles `.other(value)` directly (returns the carried string) and otherwise looks up the matching entry by `outcome ==`; `init(rawValue:)` looks up by `rawValue ==` and falls back to `.other(rawValue)` when no entry matches. Only the six fixed cases live in the table, per the finding's instruction — `.other` still falls through exactly as before on both directions.
+
+    Used an array of tuples rather than a `Dictionary` because `OperationOutcome` isn't (and doesn't need to be) `Hashable`; the array is small and fixed (6 entries), so a linear lookup is fine and avoids adding conformance machinery just for this table.
+
+    `swift build` — clean, no errors/warnings. `swift test` — 194 tests across 4 targets (94+34+44+22), all green, including `OperationOutcomeTests` specifically. No behavior change — this is a pure internal refactor, existing tests cover it without modification.
+  timestamp: 2026-08-01T14:05:27.185863+00:00
+- actor: claude-code
+  id: 01kyyt9snf9ar68veygrgyskhf
+  text: |-
+    ### implement — changed
+    - evidence: `swift build` clean; `swift test` 194 tests / 4 suites (94+34+44+22), all passing, zero failures, zero warnings. File changed: Sources/Operations/OperationOutcome.swift (collapsed rawValue/init(rawValue:) switches into one shared `wireVocabulary` table).
+    - next: leave in doing for /review.
+  timestamp: 2026-08-01T14:05:28.623360+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Shared terminal-outcome vocabulary: OperationOutcome enum, outcome envelope field, terminal-event contract'
@@ -68,3 +100,8 @@ Every host (Router `SessionOutbox` consumers, the coming ACP agent's `tool_call_
 - FoundationModelsShelltool: populate `outcome` on its detached-command `.completed` event.
 - FoundationModelsMCP: populate `outcome` from `MCPToolCallOutcome`; keep detail payload for provenance.
 - FoundationModelsACPAgent (plan-only): §8.4/§11.5 mapping becomes one total function `OperationOutcome → ToolCallStatus`.
+
+## Review Findings (2026-08-01 08:53)
+
+- [x] `Sources/Operations/OperationOutcome.swift:30` — The `rawValue` computed property is a switch over a known, finite set of enum cases (.succeeded, .failed, .timedOut, .stopped, .cancelled, .lost) where each arm differs only in a string constant. This is a data table (enum case → wire string) expressed as control flow instead of as a single interpreted data structure. Define a static Dictionary or array mapping enum cases to their wire-format strings once. Use that single source in both `rawValue` and `init(rawValue:)` instead of mirroring switch arms in two places.
+- [x] `Sources/Operations/OperationOutcome.swift:45` — The `init(rawValue:)` initializer is a switch over a known set of string literals (the wire vocabulary: `"succeeded"`, `"failed"`, `"timed_out"`, `"stopped"`, `"cancelled"`, `"lost"`) where each arm differs only in the enum case constructed. This is a table (wire string → enum case) expressed as control flow. Define the mapping once as a static Dictionary and use it in both directions: `rawValue` looks up the string for a case, `init(rawValue:)` looks up the case for a string. Centralize the wire vocabulary in one place.
