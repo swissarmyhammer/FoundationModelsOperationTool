@@ -27,8 +27,30 @@ comments:
     ### test — green
     - evidence: `swift test` — 194 tests in 26 suites passed (94+34+44+22 across 4 test-run groups), 0 failures, 0 warnings, 0 skipped; exit code 0. Working tree clean at 12530b4a1f2de0259b4d3c902f5cdb3de4fd0147.
   timestamp: 2026-08-05T16:06:38.280025+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kz9aw59t5mc6tsrd5rfak9w0
+  text: |-
+    ### commit — changed
+    - evidence: c71eff6 chore(kanban): add pzsgvde task/tag state for Operations shim review pass — 6 files (this task's own .kanban/tasks + .kanban/tags records, previously untracked), 0 source changes. Local only, not pushed. Implementation itself remains at 12530b4a1f2de0259b4d3c902f5cdb3de4fd0147.
+  timestamp: 2026-08-05T16:07:31.898229+00:00
+- actor: claude-code
+  id: 01kz9b0ed9d0qdc2xenbxbaa24
+  text: |-
+    ### review — clean
+    - evidence: 0 findings (9 checks attempted, 0 failed, 0 skipped) — scope `12530b4a1f2de0259b4d3c902f5cdb3de4fd0147~1..12530b4a1f2de0259b4d3c902f5cdb3de4fd0147`
+    - next: task moved to done
+  timestamp: 2026-08-05T16:09:52.297178+00:00
+- actor: claude-code
+  id: 01kz9b11znba33cb27m3bhswge
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: no-change — commit 12530b4 already satisfied all acceptance criteria; clean rebuild + 194 tests reverified green
+    - test: green — swift test, 194 passed, 0 failures
+    - commit: c71eff6 (kanban board bookkeeping only; implementation stays at 12530b4)
+    - review: clean — 0 findings, 9 checks attempted, 0 failed — task moved to done
+  timestamp: 2026-08-05T16:10:12.341610+00:00
+position_column: done
+position_ordinal: 9b80
 title: 'Operations shim: review + close the Router-vocabulary typealias commit'
 ---
 THIS REPO's task. The implementation is ALREADY COMMITTED here as `12530b4a1f2de0259b4d3c902f5cdb3de4fd0147` ("refactor(operations): shim vocabulary types to Router typealiases", local, not yet pushed), with `swift build && swift test` verified green (194 tests, 0 failures). The remaining work is the review-and-close half of the pipeline, which must run from THIS repo because the sah `review` tool is workspace-bound (running it from a sibling repo fails with "revspec not found" / "path escapes the repository root" — that is why this card moved here from the FoundationModelsMultitool board).
