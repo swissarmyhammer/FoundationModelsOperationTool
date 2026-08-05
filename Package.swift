@@ -6,8 +6,14 @@ import PackageDescription
 
 let package = Package(
     name: "FoundationModelsOperations",
+    // macOS 27 floor: the transitional shim dependency on
+    // `FoundationModelsRouter` (see below) requires macOS 27 / FoundationModels
+    // v2. `"27.0"` is a string literal rather than the `.v27` enum case, which
+    // needs `PackageDescription` 6.4 — this manifest stays on tools-version
+    // 6.2, matching the sibling packages (see e.g. `FoundationModelsMCP`'s and
+    // `FoundationModelsFileTool`'s `Package.swift`).
     platforms: [
-        .macOS(.v26),
+        .macOS("27.0"),
         .iOS(.v26),
     ],
     products: [
@@ -17,6 +23,16 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.0"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "604.0.0-latest"),
+        // Transitional shim dependency (eventplan.md §"Phases" phase 1):
+        // Router now owns the shared vocabulary (`OperationEvent`,
+        // `OperationOutcome`, `OperationEventSink`, `ForkableTool`) in its
+        // `Hosting/` module. `Operations` re-exports those types as
+        // typealiases instead of defining them, so the siblings keep
+        // compiling against one canonical definition. This pulls MLX
+        // transitively into this package's build — accepted, temporary
+        // build weight. The shim, and this dependency, die with
+        // `FoundationModelsOperationTool` in phase 5.
+        .package(url: "git@github.com:swissarmyhammer/FoundationModelsRouter.git", branch: "main"),
     ],
     targets: [
         // Macro implementation target: the `@Operation` / `@OperationParam`
@@ -36,12 +52,17 @@ let package = Package(
         // framework and re-exports ArgumentParser so that any target
         // applying `@Operation` (whose macro-generated `Command` types
         // conform to `ParsableCommand`) compiles without declaring its own
-        // dependency on swift-argument-parser.
+        // dependency on swift-argument-parser. Also links Router — see the
+        // `FoundationModelsRouter` dependency's comment above — so
+        // `OperationEvent.swift`, `OperationOutcome.swift`,
+        // `OperationEventSink.swift`, and `ForkableTool.swift` can re-export
+        // Router's canonical types as typealiases.
         .target(
             name: "Operations",
             dependencies: [
                 "OperationsMacros",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "FoundationModelsRouter", package: "FoundationModelsRouter"),
             ]
         ),
 
