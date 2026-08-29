@@ -2,6 +2,11 @@
 
 [![CI](https://github.com/swissarmyhammer/FoundationModelsOperationTool/actions/workflows/ci.yml/badge.svg)](https://github.com/swissarmyhammer/FoundationModelsOperationTool/actions/workflows/ci.yml)
 
+> **Superseded (2026-08-29).** The full capability of this package moved to
+> [FoundationModelsExtras](https://github.com/swissarmyhammer/FoundationModelsExtras)
+> as the `Operations` and `OperationsCLI` modules. New work goes there. This
+> repository stays only until its last consumer moves, then we archive it.
+
 Declare a typed operation once with `@Operation`, and get both a fused
 [FoundationModels](https://developer.apple.com/documentation/foundationmodels) `Tool` and a dual-use
 command-line verb for free. A struct's stored properties *are* its parameters; behavior lives in a
